@@ -1,3 +1,8 @@
+-- ⚠️ HISTÓRICO / DEPRECIADO — NÃO EXECUTE EM UM PROJETO NOVO.
+-- Suas tabelas (bills_payable, planned_visits, media_contents, live_stream)
+-- já estão em supabase_complete_setup.sql, que é a fonte única de verdade
+-- do schema. Veja SQL_SETUP.md na raiz do repo. Mantido só para histórico.
+
 -- Create is_admin function if not exists
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$

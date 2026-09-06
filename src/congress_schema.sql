@@ -1,3 +1,8 @@
+-- ⚠️ HISTÓRICO / DEPRECIADO — NÃO EXECUTE EM UM PROJETO NOVO.
+-- Estas tabelas já estão em supabase_complete_setup.sql, a fonte única de
+-- verdade do schema. Veja SQL_SETUP.md na raiz do repo. Mantido em sincronia
+-- (recebeu a mesma correção de RLS/RPC) só por referência histórica.
+
 -- Congresses Table
 CREATE TABLE congresses (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -56,20 +61,52 @@ CREATE POLICY "Admins can manage congresses" ON congresses FOR ALL USING (is_adm
 CREATE POLICY "Public can view workshops" ON congress_workshops FOR SELECT USING (true);
 CREATE POLICY "Admins can manage workshops" ON congress_workshops FOR ALL USING (is_admin());
 
--- Registrations: Anyone can register, owners can view their own, admins can manage all
+-- Registrations: Anyone can register (public form, no login required), but
+-- reading back full personal data (CPF, WhatsApp, address...) is restricted
+-- to staff (admin/pastor) and the registrant themselves. Public "check my
+-- status by WhatsApp" lookups go through the SECURITY DEFINER RPC below
+-- instead of a raw table SELECT, so a direct API call can't dump every
+-- registration's PII at once.
 DROP POLICY IF EXISTS "Users can manage own registrations" ON congress_registrations;
 DROP POLICY IF EXISTS "Admins can manage all registrations" ON congress_registrations;
 DROP POLICY IF EXISTS "Anyone can register for congress" ON congress_registrations;
 DROP POLICY IF EXISTS "Users can view own registration" ON congress_registrations;
+DROP POLICY IF EXISTS "Anyone can view registrations" ON congress_registrations;
+DROP POLICY IF EXISTS "Staff and owners can view registrations" ON congress_registrations;
+DROP POLICY IF EXISTS "Staff can manage all registrations" ON congress_registrations;
 
-CREATE POLICY "Anyone can register for congress" 
-  ON congress_registrations FOR INSERT 
+CREATE POLICY "Anyone can register for congress"
+  ON congress_registrations FOR INSERT
   WITH CHECK (true);
 
-CREATE POLICY "Anyone can view registrations" 
-  ON congress_registrations FOR SELECT 
-  USING (true);
+CREATE POLICY "Staff and owners can view registrations"
+  ON congress_registrations FOR SELECT
+  TO authenticated
+  USING (
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor')
+    OR auth.uid() = user_id
+  );
 
-CREATE POLICY "Admins can manage all registrations" 
-  ON congress_registrations FOR ALL 
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+CREATE POLICY "Staff can manage all registrations"
+  ON congress_registrations FOR ALL
+  USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
+
+-- Consulta pública de status por WhatsApp (usada por quem se inscreveu sem
+-- login). Roda como SECURITY DEFINER, então não depende da policy de SELECT
+-- acima, mas só devolve o que casar exatamente com o telefone informado —
+-- não permite listar/dumpar todas as inscrições.
+CREATE OR REPLACE FUNCTION public.check_congress_registration_by_whatsapp(
+  p_congress_id UUID,
+  p_whatsapp TEXT
+)
+RETURNS SETOF congress_registrations AS $$
+  SELECT *
+  FROM congress_registrations
+  WHERE congress_id = p_congress_id
+    AND personal_data->>'whatsapp' = p_whatsapp
+  ORDER BY created_at DESC
+  LIMIT 1;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.check_congress_registration_by_whatsapp(UUID, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.check_congress_registration_by_whatsapp(UUID, TEXT) TO anon, authenticated;

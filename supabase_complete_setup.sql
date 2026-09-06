@@ -1,7 +1,13 @@
 -- =========================================================================
 -- MEVAM ITAPEMA SERTÃO - SUPABASE COMUNICAÇÃO & SCHEMA COMPLETO UNIFICADO
 -- =========================================================================
--- Este arquivo unifica TODAS as tabelas, funções, triggers, políticas de RLS e 
+-- ✅ ESTE É O ARQUIVO CANÔNICO — a fonte única de verdade do schema base.
+-- Para a ordem completa de execução (incluindo os módulos que faltam aqui:
+-- church_services, event_lists, e a correção final de RLS), veja
+-- SQL_SETUP.md na raiz do repo. Os demais *.sql soltos na raiz e alguns em
+-- src/ são históricos/depreciados e apontam de volta pra cá.
+--
+-- Este arquivo unifica TODAS as tabelas, funções, triggers, políticas de RLS e
 -- dados padrão necessários para que o aplicativo front-end funcione em perfeita
 -- sintonia com a sua base de dados do Supabase.
 --
@@ -758,8 +764,32 @@ CREATE POLICY "Admins can manage congresses" ON congresses FOR ALL USING (is_adm
 CREATE POLICY "Public can view workshops" ON congress_workshops FOR SELECT USING (true);
 CREATE POLICY "Admins can manage workshops" ON congress_workshops FOR ALL USING (is_admin());
 CREATE POLICY "Anyone can register for congress" ON congress_registrations FOR INSERT WITH CHECK (true);
-CREATE POLICY "Anyone can view registrations" ON congress_registrations FOR SELECT USING (true);
+
+-- Leitura direta restrita a staff/dono da inscrição (dados sensíveis: CPF,
+-- WhatsApp, endereço). Consulta pública "status por WhatsApp" usa a RPC
+-- check_congress_registration_by_whatsapp() abaixo, não SELECT direto.
+DROP POLICY IF EXISTS "Anyone can view registrations" ON congress_registrations;
+CREATE POLICY "Staff and owners can view registrations" ON congress_registrations
+  FOR SELECT TO authenticated
+  USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor') OR auth.uid() = user_id);
+
 CREATE POLICY "Admins can manage all registrations" ON congress_registrations FOR ALL USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
+
+CREATE OR REPLACE FUNCTION public.check_congress_registration_by_whatsapp(
+  p_congress_id UUID,
+  p_whatsapp TEXT
+)
+RETURNS SETOF congress_registrations AS $$
+  SELECT *
+  FROM congress_registrations
+  WHERE congress_id = p_congress_id
+    AND personal_data->>'whatsapp' = p_whatsapp
+  ORDER BY created_at DESC
+  LIMIT 1;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.check_congress_registration_by_whatsapp(UUID, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.check_congress_registration_by_whatsapp(UUID, TEXT) TO anon, authenticated;
 
 -- 5.14 Políticas para Consentimento de Cookies/Privacidade
 CREATE POLICY "Users can view their own consent log" ON privacy_consent_log FOR SELECT USING (auth.uid() = user_id);
@@ -784,7 +814,14 @@ CREATE POLICY "Leaders and admins can view unavailability" ON user_unavailabilit
 
 -- 5.17 Políticas do Carrossel de Imagens do Banner Principal
 CREATE POLICY "Allow public read access" ON events_carousel FOR SELECT USING (true);
-CREATE POLICY "Allow authenticated users to manage events" ON events_carousel FOR ALL USING (auth.role() = 'authenticated');
+
+-- Antes qualquer usuário autenticado (não só admin/pastor) podia gerenciar
+-- o carrossel de eventos da home.
+DROP POLICY IF EXISTS "Allow authenticated users to manage events" ON events_carousel;
+CREATE POLICY "Staff can manage events carousel" ON events_carousel
+  FOR ALL TO authenticated
+  USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'))
+  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
 
 -- 5.18 Políticas do Teste Vocacional
 CREATE POLICY "Users can view their own tests." ON vocational_tests FOR SELECT USING (auth.uid() = user_id);

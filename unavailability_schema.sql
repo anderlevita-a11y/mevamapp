@@ -1,3 +1,7 @@
+-- ⚠️ HISTÓRICO / DEPRECIADO — NÃO EXECUTE EM UM PROJETO NOVO.
+-- Esta tabela já está em supabase_complete_setup.sql (seção 5.16), a fonte
+-- única de verdade do schema. Veja SQL_SETUP.md na raiz do repo.
+
 -- Create user_unavailability table
 CREATE TABLE IF NOT EXISTS user_unavailability (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

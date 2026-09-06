@@ -1,3 +1,7 @@
+-- ⚠️ HISTÓRICO / DEPRECIADO — NÃO EXECUTE EM UM PROJETO NOVO.
+-- Esta tabela já está em supabase_complete_setup.sql, a fonte única de
+-- verdade do schema. Veja SQL_SETUP.md na raiz do repo.
+
 -- Table for Vocational Tests
 CREATE TABLE vocational_tests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

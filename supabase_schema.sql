@@ -1,3 +1,12 @@
+-- ⚠️ HISTÓRICO / DEPRECIADO — NÃO EXECUTE EM UM PROJETO NOVO.
+-- Este arquivo e supabase_complete_setup.sql definem as MESMAS tabelas
+-- (profiles, ministries, financeiro, cantina, congressos...) de forma
+-- incompatível entre si — rodar os dois causa erro de "already exists".
+-- supabase_complete_setup.sql é o mais completo e é a fonte única de
+-- verdade do schema. Veja SQL_SETUP.md na raiz do repo.
+-- Mantido só para referência histórica (recebeu a mesma correção de RLS
+-- que os outros arquivos, mas não deve ser executado do zero).
+
 -- Create tables for Mevam Itapema Sertão
 
 -- 1. Cell Groups
@@ -387,8 +396,32 @@ CREATE POLICY "Admins can manage congresses" ON congresses FOR ALL USING (is_adm
 CREATE POLICY "Public can view workshops" ON congress_workshops FOR SELECT USING (true);
 CREATE POLICY "Admins can manage workshops" ON congress_workshops FOR ALL USING (is_admin());
 CREATE POLICY "Anyone can register for congress" ON congress_registrations FOR INSERT WITH CHECK (true);
-CREATE POLICY "Anyone can view registrations" ON congress_registrations FOR SELECT USING (true);
+
+-- Leitura direta restrita a staff/dono da inscrição (dados sensíveis: CPF,
+-- WhatsApp, endereço). Consulta pública "status por WhatsApp" usa a RPC
+-- check_congress_registration_by_whatsapp() abaixo, não SELECT direto.
+DROP POLICY IF EXISTS "Anyone can view registrations" ON congress_registrations;
+CREATE POLICY "Staff and owners can view registrations" ON congress_registrations
+  FOR SELECT TO authenticated
+  USING (is_admin() OR (auth.jwt() -> 'app_metadata' ->> 'role') = 'pastor' OR auth.uid() = user_id);
+
 CREATE POLICY "Admins can manage all registrations" ON congress_registrations FOR ALL USING (is_admin());
+
+CREATE OR REPLACE FUNCTION public.check_congress_registration_by_whatsapp(
+  p_congress_id UUID,
+  p_whatsapp TEXT
+)
+RETURNS SETOF congress_registrations AS $$
+  SELECT *
+  FROM congress_registrations
+  WHERE congress_id = p_congress_id
+    AND personal_data->>'whatsapp' = p_whatsapp
+  ORDER BY created_at DESC
+  LIMIT 1;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.check_congress_registration_by_whatsapp(UUID, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.check_congress_registration_by_whatsapp(UUID, TEXT) TO anon, authenticated;
 
 -- Sincronização e Triggers do Perfil
 

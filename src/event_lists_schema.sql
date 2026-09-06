@@ -1,3 +1,7 @@
+-- ✅ ARQUIVO ATIVO (não depreciado) — event_lists/event_list_participants não
+-- estão em supabase_complete_setup.sql. Veja SQL_SETUP.md na raiz do repo
+-- para a ordem de execução completa.
+--
 -- ==============================================================================
 -- MEVAM ITAPEMA SERTÃO - LISTAS DE EVENTOS & COMPROVANTES
 -- Execute este script no SQL Editor do seu Supabase Dashboard

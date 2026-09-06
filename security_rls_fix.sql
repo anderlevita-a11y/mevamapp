@@ -4,7 +4,7 @@
 -- Execute este script no SQL Editor do seu projeto Supabase
 -- (Dashboard do Supabase -> SQL Editor -> New Query -> Run)
 --
--- Este script corrige 2 problemas encontrados em auditoria de segurança:
+-- Este script corrige os problemas encontrados em auditoria de segurança:
 --
 -- 1) CRÍTICO — Escalação de privilégio: a política de UPDATE da tabela
 --    "profiles" ("Users can update own profile") só verifica
@@ -29,6 +29,20 @@
 -- Também ajusta "page_visits": a contagem de visitas já é feita pela
 -- função increment_page_visit() (SECURITY DEFINER), então a policy
 -- pública de UPDATE direto na tabela não é necessária e foi removida.
+--
+-- 3) ALTO — "congress_registrations" (CPF, WhatsApp, endereço de todo mundo
+--    que já se inscreveu em algum congresso) tinha SELECT com USING(true):
+--    qualquer requisição direta à API REST do Supabase, sem login, listava
+--    TODAS as inscrições. Correção: leitura restrita a staff/dono da
+--    inscrição; a consulta pública "ver status pela WhatsApp" passa a usar
+--    uma função check_congress_registration_by_whatsapp() que só devolve o
+--    que casa com o telefone informado, sem permitir dump completo.
+--
+-- 4) MÉDIO — "app_settings" e "media_contents" tinham policies chamadas
+--    "Admins can..." mas com USING(true)/WITH CHECK(true): o nome mentia,
+--    a escrita era pública. "events_carousel" liberava gestão pra qualquer
+--    usuário autenticado (não só admin/pastor). Todas corrigidas para
+--    exigir admin/pastor de fato.
 --
 -- Este script é IDEMPOTENTE: pode ser executado quantas vezes for
 -- preciso sem causar erro.
@@ -218,6 +232,81 @@ DROP POLICY IF EXISTS "Admins can view visits" ON public.page_visits;
 
 CREATE POLICY "Admins can view visits" ON public.page_visits
   FOR SELECT TO authenticated USING (public.is_admin());
+
+
+-- ----------------------------------------------------------------------------
+-- 6. ALTO: vazamento de PII em "congress_registrations" (CPF, WhatsApp,
+--    endereço de todos os inscritos legível por qualquer requisição direta
+--    à API, sem login)
+-- ----------------------------------------------------------------------------
+-- A inscrição pública continua liberada (INSERT). A leitura direta da tabela
+-- passa a exigir ser staff (admin/pastor) ou o próprio dono da inscrição.
+-- A consulta pública "ver status pela WhatsApp" (usada por quem se inscreveu
+-- sem login) passa a usar a função abaixo em vez de SELECT direto, então
+-- continua funcionando sem expor as inscrições de todo mundo.
+DROP POLICY IF EXISTS "Anyone can view registrations" ON public.congress_registrations;
+DROP POLICY IF EXISTS "Staff and owners can view registrations" ON public.congress_registrations;
+DROP POLICY IF EXISTS "Staff can manage all registrations" ON public.congress_registrations;
+
+CREATE POLICY "Staff and owners can view registrations" ON public.congress_registrations
+  FOR SELECT TO authenticated
+  USING (public.is_admin_or_pastor() OR auth.uid() = user_id);
+
+CREATE POLICY "Staff can manage all registrations" ON public.congress_registrations
+  FOR ALL TO authenticated
+  USING (public.is_admin_or_pastor())
+  WITH CHECK (public.is_admin_or_pastor());
+
+CREATE OR REPLACE FUNCTION public.check_congress_registration_by_whatsapp(
+  p_congress_id UUID,
+  p_whatsapp TEXT
+)
+RETURNS SETOF public.congress_registrations AS $$
+  SELECT *
+  FROM public.congress_registrations
+  WHERE congress_id = p_congress_id
+    AND personal_data->>'whatsapp' = p_whatsapp
+  ORDER BY created_at DESC
+  LIMIT 1;
+$$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
+
+REVOKE ALL ON FUNCTION public.check_congress_registration_by_whatsapp(UUID, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.check_congress_registration_by_whatsapp(UUID, TEXT) TO anon, authenticated;
+
+
+-- ----------------------------------------------------------------------------
+-- 7. MÉDIO: "app_settings" e "media_contents" com nome de policy enganoso
+--    ("Admins can...") mas condição USING(true)/WITH CHECK(true) — escrita
+--    liberada pra qualquer um, mesmo não logado
+-- ----------------------------------------------------------------------------
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admins and authenticated can upsert app settings" ON public.app_settings;
+DROP POLICY IF EXISTS "Staff can manage app settings" ON public.app_settings;
+CREATE POLICY "Staff can manage app settings" ON public.app_settings
+  FOR ALL TO authenticated
+  USING (public.is_admin_or_pastor())
+  WITH CHECK (public.is_admin_or_pastor());
+
+ALTER TABLE public.media_contents ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admins can manage all media_contents" ON public.media_contents;
+DROP POLICY IF EXISTS "Staff can manage all media_contents" ON public.media_contents;
+CREATE POLICY "Staff can manage all media_contents" ON public.media_contents
+  FOR ALL TO authenticated
+  USING (public.is_admin_or_pastor())
+  WITH CHECK (public.is_admin_or_pastor());
+
+
+-- ----------------------------------------------------------------------------
+-- 8. MÉDIO: "events_carousel" gerenciável por qualquer usuário autenticado
+--    (não só admin/pastor)
+-- ----------------------------------------------------------------------------
+ALTER TABLE public.events_carousel ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow authenticated users to manage events" ON public.events_carousel;
+DROP POLICY IF EXISTS "Staff can manage events carousel" ON public.events_carousel;
+CREATE POLICY "Staff can manage events carousel" ON public.events_carousel
+  FOR ALL TO authenticated
+  USING (public.is_admin_or_pastor())
+  WITH CHECK (public.is_admin_or_pastor());
 
 
 -- ============================================================================

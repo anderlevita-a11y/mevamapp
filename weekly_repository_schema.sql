@@ -1,3 +1,10 @@
+-- ⚠️ PARCIALMENTE DEPRECIADO — as tabelas app_settings e media_contents já
+-- estão em supabase_complete_setup.sql (a fonte única de verdade do
+-- schema); rodar as seções 1 e 2 abaixo num projeto que já tem essas
+-- tabelas é redundante (mas inofensivo, graças ao IF NOT EXISTS/DROP+CREATE
+-- POLICY). O único motivo pra ainda rodar este arquivo é a seção 3: o INSERT
+-- de seed com o conteúdo padrão do Repositório Semanal. Veja SQL_SETUP.md.
+--
 -- ==============================================================================
 -- REPOSITÓRIO SEMANAL & GESTÃO DE CONTEÚDO (MEVAM ITAPEMA SERTÃO)
 -- Script SQL para Supabase / PostgreSQL
@@ -19,11 +26,17 @@ CREATE POLICY "Public can view app settings"
   ON app_settings FOR SELECT 
   USING (true);
 
+-- Apesar do nome, esta policy antiga tinha USING(true)/WITH CHECK(true) —
+-- ou seja, qualquer pessoa (mesmo não logada) podia sobrescrever as
+-- configurações do app (inclui o conteúdo do Repositório Semanal). Corrigido
+-- para exigir admin/pastor de fato.
 DROP POLICY IF EXISTS "Admins and authenticated can upsert app settings" ON app_settings;
-CREATE POLICY "Admins and authenticated can upsert app settings" 
-  ON app_settings FOR ALL 
-  USING (true)
-  WITH CHECK (true);
+DROP POLICY IF EXISTS "Staff can manage app settings" ON app_settings;
+CREATE POLICY "Staff can manage app settings"
+  ON app_settings FOR ALL
+  TO authenticated
+  USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'))
+  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
 
 -- 2. Garante que a tabela media_contents existe para histórico e retrocompatibilidade
 CREATE TABLE IF NOT EXISTS media_contents (
@@ -48,11 +61,18 @@ CREATE POLICY "Public can view published media_contents"
   ON media_contents FOR SELECT 
   USING (true);
 
+-- Mesmo problema: nome dizia "Admins" mas USING(true)/WITH CHECK(true)
+-- liberava gestão completa para qualquer um. Corrigido para exigir
+-- admin/pastor; membros comuns continuam podendo enviar conteúdo para
+-- revisão via a policy "Users can insert media_contents" (ver
+-- supabase_setup.sql / supabase_complete_setup.sql).
 DROP POLICY IF EXISTS "Admins can manage all media_contents" ON media_contents;
-CREATE POLICY "Admins can manage all media_contents" 
-  ON media_contents FOR ALL 
-  USING (true)
-  WITH CHECK (true);
+DROP POLICY IF EXISTS "Staff can manage all media_contents" ON media_contents;
+CREATE POLICY "Staff can manage all media_contents"
+  ON media_contents FOR ALL
+  TO authenticated
+  USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'))
+  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
 
 -- 3. Insere a semente inicial padrão para o Repositório Semanal caso ainda não exista
 INSERT INTO app_settings (key, value, updated_at)

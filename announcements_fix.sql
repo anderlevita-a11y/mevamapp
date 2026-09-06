@@ -1,3 +1,9 @@
+-- ⚠️ HISTÓRICO / DEPRECIADO — NÃO EXECUTE EM UM PROJETO NOVO.
+-- As tabelas announcements/ministry_notices já estão em
+-- supabase_complete_setup.sql, e as políticas corretas de RLS estão
+-- centralizadas em security_rls_fix.sql (rode esse por último, sempre).
+-- Veja SQL_SETUP.md na raiz do repo. Mantido só para histórico.
+--
 -- =========================================================================
 -- MEVAM ITAPEMA: CORREÇÃO E ATIVAÇÃO COMPLETA DE AVISOS & NOTIFICAÇÕES
 -- =========================================================================

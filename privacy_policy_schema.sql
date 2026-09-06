@@ -1,3 +1,8 @@
+-- ⚠️ HISTÓRICO / DEPRECIADO — NÃO EXECUTE EM UM PROJETO NOVO.
+-- Estas tabelas (privacy_consent_log, page_visits, action_rate_limits) já
+-- estão em supabase_complete_setup.sql, a fonte única de verdade do schema.
+-- Veja SQL_SETUP.md na raiz do repo. Mantido só para histórico.
+
 -- Enable extra security for privacy tracking
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS privacy_policy_accepted BOOLEAN DEFAULT FALSE;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS privacy_policy_accepted_at TIMESTAMP WITH TIME ZONE;

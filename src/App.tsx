@@ -11582,12 +11582,10 @@ const CongressSection = ({
     setStatusResult(null);
     try {
       const { data, error } = await supabase
-        .from('congress_registrations')
-        .select('*')
-        .eq('congress_id', congressId)
-        .filter('personal_data->>whatsapp', 'eq', statusCheckPhone)
-        .order('created_at', { ascending: false })
-        .limit(1);
+        .rpc('check_congress_registration_by_whatsapp', {
+          p_congress_id: congressId,
+          p_whatsapp: statusCheckPhone
+        });
 
       if (error) throw error;
       if (data && data.length > 0) {
