@@ -9,6 +9,7 @@ export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
   useEffect(() => {
@@ -23,10 +24,11 @@ export function usePWAInstall() {
     const standalone = checkStandalone();
     setIsInstalled(standalone);
 
-    // 2. Detect iOS device
+    // 2. Detect iOS / Android device
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIOSDevice = /iphone|ipad|ipod/.test(userAgent) && !(window as any).MSStream;
     setIsIOS(isIOSDevice);
+    setIsAndroid(/android/.test(userAgent));
 
     // 3. Check dismissed cache (expires after 2 days so it doesn't permanently block, or user can re-open)
     const dismissedUntil = localStorage.getItem('mevam_pwa_install_dismissed_until');
@@ -88,6 +90,7 @@ export function usePWAInstall() {
     isInstallable: !!deferredPrompt,
     isInstalled,
     isIOS,
+    isAndroid,
     isDismissed,
     install,
     dismiss,

@@ -11,7 +11,7 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
   forceShowModal = false,
   onCloseModal
 }) => {
-  const { isInstallable, isInstalled, isIOS, isDismissed, install, dismiss } = usePWAInstall();
+  const { isInstallable, isInstalled, isIOS, isAndroid, isDismissed, install, dismiss } = usePWAInstall();
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [installedSuccess, setInstalledSuccess] = useState(false);
@@ -66,7 +66,7 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
                 className="w-12 h-12 rounded-xl object-contain bg-black border border-stone-700 shadow-md"
                 onError={(e) => {
                   // Fallback to Supabase image if static file is loading
-                  (e.currentTarget as HTMLImageElement).src = 'https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/public/mensagem/IMG-20260111-WA0002.jpg';
+                  (e.currentTarget as HTMLImageElement).src = 'https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/sign/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif?token=eyJraWQiOiI3MTg0NDIzOS05ZGQ3LTQ3NzQtOTA2Ny1mZmE3MjVmM2QzOGYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiYW5uZXIvR2VtaW5pX0dlbmVyYXRlZF9JbWFnZV85cHNwYzY5cHNwYzY5cHNwLmpmaWYiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4NzA2MjMxLCJleHAiOjE4MjAyNDIyMzF9.C-fP_iVbjIac8cyKK_7Jvvu2eaQgcS74W4VANvjAfzA';
                 }}
               />
               <span className="absolute -bottom-1 -right-1 bg-amber-500 text-stone-950 p-0.5 rounded-full ring-2 ring-stone-900">
@@ -133,7 +133,7 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
                   alt="MEVAM Itapema Sertão"
                   className="w-12 h-12 rounded-2xl object-contain bg-black border border-stone-700 shadow-md"
                   onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = 'https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/public/mensagem/IMG-20260111-WA0002.jpg';
+                    (e.currentTarget as HTMLImageElement).src = 'https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/sign/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif?token=eyJraWQiOiI3MTg0NDIzOS05ZGQ3LTQ3NzQtOTA2Ny1mZmE3MjVmM2QzOGYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiYW5uZXIvR2VtaW5pX0dlbmVyYXRlZF9JbWFnZV85cHNwYzY5cHNwYzY5cHNwLmpmaWYiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4NzA2MjMxLCJleHAiOjE4MjAyNDIyMzF9.C-fP_iVbjIac8cyKK_7Jvvu2eaQgcS74W4VANvjAfzA';
                   }}
                 />
                 <div>
@@ -187,14 +187,16 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
                   </ol>
                 </div>
               ) : isInstallable ? (
-                // Direct Chrome/Edge/Android install
+                // Direct Chrome/Edge install (native browser prompt available)
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
-                    <Monitor size={18} />
-                    <span>Instalação Direta:</span>
+                    {isAndroid ? <Smartphone size={18} /> : <Monitor size={18} />}
+                    <span>{isAndroid ? 'Instalação Direta no Android:' : 'Instalação Direta:'}</span>
                   </div>
                   <p className="text-xs text-stone-300">
-                    O aplicativo pode ser instalado diretamente na sua área de trabalho ou tela de início com um único clique.
+                    {isAndroid
+                      ? 'O aplicativo pode ser instalado direto na tela inicial do seu celular com um único toque.'
+                      : 'O aplicativo pode ser instalado diretamente na sua área de trabalho com um único clique.'}
                   </p>
                   <button
                     onClick={handleInstallClick}
@@ -204,8 +206,42 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
                     <span>Confirmar e Instalar Agora</span>
                   </button>
                 </div>
+              ) : isAndroid ? (
+                // Android manual steps (Chrome without a native prompt yet, or another Android browser)
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
+                    <Smartphone size={18} />
+                    <span>Como instalar no Android (Chrome):</span>
+                  </div>
+                  <ol className="space-y-2.5 text-xs text-stone-300">
+                    <li className="flex items-start gap-2.5 bg-stone-800/60 p-3 rounded-xl border border-stone-700/60">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500 text-stone-950 font-bold flex items-center justify-center text-xs">
+                        1
+                      </span>
+                      <span>
+                        Toque no menu de <strong>3 pontinhos</strong> no canto superior direito do navegador.
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2.5 bg-stone-800/60 p-3 rounded-xl border border-stone-700/60">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500 text-stone-950 font-bold flex items-center justify-center text-xs">
+                        2
+                      </span>
+                      <span>
+                        Toque em <strong>"Instalar aplicativo"</strong> ou <strong>"Adicionar à tela inicial"</strong>.
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2.5 bg-stone-800/60 p-3 rounded-xl border border-stone-700/60">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500 text-stone-950 font-bold flex items-center justify-center text-xs">
+                        3
+                      </span>
+                      <span>
+                        Confirme tocando em <strong>"Instalar"</strong> — o ícone do MEVAM aparece na sua tela inicial.
+                      </span>
+                    </li>
+                  </ol>
+                </div>
               ) : (
-                // General Android / Desktop guidance
+                // Desktop guidance
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-amber-400 font-semibold text-sm">
                     <Monitor size={18} />

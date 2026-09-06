@@ -3759,7 +3759,7 @@ const Navbar = ({
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-3">
             <img 
-              src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/public/mensagem/IMG-20260111-WA0002.jpg" 
+              src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/sign/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif?token=eyJraWQiOiI3MTg0NDIzOS05ZGQ3LTQ3NzQtOTA2Ny1mZmE3MjVmM2QzOGYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiYW5uZXIvR2VtaW5pX0dlbmVyYXRlZF9JbWFnZV85cHNwYzY5cHNwYzY5cHNwLmpmaWYiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4NzA2MjMxLCJleHAiOjE4MjAyNDIyMzF9.C-fP_iVbjIac8cyKK_7Jvvu2eaQgcS74W4VANvjAfzA" 
               alt="Logo MEVAM" 
               className="h-10 w-10 object-contain rounded-lg shadow-sm"
               referrerPolicy="no-referrer"
@@ -3792,8 +3792,8 @@ const Navbar = ({
                 onClick={onOpenInstallApp}
                 title="Instalar App no celular ou computador"
                 className={`hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all border cursor-pointer ${
-                  (scrolled || isOpen) 
-                    ? 'border-amber-500/50 text-amber-700 bg-amber-50 hover:bg-amber-100' 
+                  (scrolled || isOpen)
+                    ? 'border-amber-500/50 text-amber-700 bg-amber-50 hover:bg-amber-100'
                     : 'border-amber-400/50 text-amber-300 bg-amber-400/10 hover:bg-amber-400/20'
                 }`}
               >
@@ -3801,7 +3801,22 @@ const Navbar = ({
                 <span>Instalar App</span>
               </button>
             )}
-            
+
+            <button
+              onClick={() => {
+                const text = `Conheça o aplicativo oficial da MEVAM Itapema Sertão! Acesse cultos, programações e conteúdos: ${window.location.origin}`;
+                window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+              }}
+              title="Compartilhar App no WhatsApp"
+              className={`inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border cursor-pointer ${
+                (scrolled || isOpen)
+                  ? 'border-emerald-500/40 text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
+                  : 'border-emerald-400/40 text-emerald-300 bg-emerald-400/10 hover:bg-emerald-400/20'
+              }`}
+            >
+              <Share2 size={15} />
+            </button>
+
             <div className="relative">
               <button 
                 onClick={() => setShowLoginOptions(!showLoginOptions)}
@@ -3943,6 +3958,19 @@ const Navbar = ({
                   </button>
                 </div>
               )}
+              <div className="pt-2">
+                <button
+                  onClick={() => {
+                    const text = `Conheça o aplicativo oficial da MEVAM Itapema Sertão! Acesse cultos, programações e conteúdos: ${window.location.origin}`;
+                    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+                    setIsOpen(false);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-4 py-3 rounded-xl font-bold text-sm transition-colors cursor-pointer"
+                >
+                  <Share2 size={16} />
+                  <span>Compartilhar App no WhatsApp</span>
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
@@ -13714,7 +13742,7 @@ const Hero = ({
           >
             <div className="w-14 h-14 rounded-2xl bg-white/[0.08] backdrop-blur-md border border-white/20 p-2.5 shadow-2xl mb-3 flex items-center justify-center">
               <img 
-                src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/public/mensagem/IMG-20260111-WA0002.jpg" 
+                src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/sign/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif?token=eyJraWQiOiI3MTg0NDIzOS05ZGQ3LTQ3NzQtOTA2Ny1mZmE3MjVmM2QzOGYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiYW5uZXIvR2VtaW5pX0dlbmVyYXRlZF9JbWFnZV85cHNwYzY5cHNwYzY5cHNwLmpmaWYiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4NzA2MjMxLCJleHAiOjE4MjAyNDIyMzF9.C-fP_iVbjIac8cyKK_7Jvvu2eaQgcS74W4VANvjAfzA" 
                 alt="MEVAM" 
                 className="w-full h-full object-contain rounded-lg"
                 referrerPolicy="no-referrer"
@@ -15050,7 +15078,7 @@ const Footer = ({ onOpenInstallApp }: { onOpenInstallApp?: () => void }) => {
           <div className="space-y-6">
             <div className="flex items-center space-x-3">
               <img 
-                src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/public/mensagem/IMG-20260111-WA0002.jpg" 
+                src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/sign/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif?token=eyJraWQiOiI3MTg0NDIzOS05ZGQ3LTQ3NzQtOTA2Ny1mZmE3MjVmM2QzOGYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiYW5uZXIvR2VtaW5pX0dlbmVyYXRlZF9JbWFnZV85cHNwYzY5cHNwYzY5cHNwLmpmaWYiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4NzA2MjMxLCJleHAiOjE4MjAyNDIyMzF9.C-fP_iVbjIac8cyKK_7Jvvu2eaQgcS74W4VANvjAfzA" 
                 alt="Logo MEVAM" 
                 className="h-12 w-12 object-contain rounded-xl shadow-lg shadow-black/20"
                 referrerPolicy="no-referrer"
