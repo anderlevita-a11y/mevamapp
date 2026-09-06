@@ -3759,7 +3759,7 @@ const Navbar = ({
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-3">
             <img 
-              src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/sign/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif?token=eyJraWQiOiI3MTg0NDIzOS05ZGQ3LTQ3NzQtOTA2Ny1mZmE3MjVmM2QzOGYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiYW5uZXIvR2VtaW5pX0dlbmVyYXRlZF9JbWFnZV85cHNwYzY5cHNwYzY5cHNwLmpmaWYiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4NzA2MjMxLCJleHAiOjE4MjAyNDIyMzF9.C-fP_iVbjIac8cyKK_7Jvvu2eaQgcS74W4VANvjAfzA" 
+              src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/public/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif" 
               alt="Logo MEVAM" 
               className="h-10 w-10 object-contain rounded-lg shadow-sm"
               referrerPolicy="no-referrer"
@@ -13742,7 +13742,7 @@ const Hero = ({
           >
             <div className="w-14 h-14 rounded-2xl bg-white/[0.08] backdrop-blur-md border border-white/20 p-2.5 shadow-2xl mb-3 flex items-center justify-center">
               <img 
-                src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/sign/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif?token=eyJraWQiOiI3MTg0NDIzOS05ZGQ3LTQ3NzQtOTA2Ny1mZmE3MjVmM2QzOGYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiYW5uZXIvR2VtaW5pX0dlbmVyYXRlZF9JbWFnZV85cHNwYzY5cHNwYzY5cHNwLmpmaWYiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4NzA2MjMxLCJleHAiOjE4MjAyNDIyMzF9.C-fP_iVbjIac8cyKK_7Jvvu2eaQgcS74W4VANvjAfzA" 
+                src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/public/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif" 
                 alt="MEVAM" 
                 className="w-full h-full object-contain rounded-lg"
                 referrerPolicy="no-referrer"
@@ -15078,7 +15078,7 @@ const Footer = ({ onOpenInstallApp }: { onOpenInstallApp?: () => void }) => {
           <div className="space-y-6">
             <div className="flex items-center space-x-3">
               <img 
-                src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/sign/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif?token=eyJraWQiOiI3MTg0NDIzOS05ZGQ3LTQ3NzQtOTA2Ny1mZmE3MjVmM2QzOGYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiYW5uZXIvR2VtaW5pX0dlbmVyYXRlZF9JbWFnZV85cHNwYzY5cHNwYzY5cHNwLmpmaWYiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4NzA2MjMxLCJleHAiOjE4MjAyNDIyMzF9.C-fP_iVbjIac8cyKK_7Jvvu2eaQgcS74W4VANvjAfzA" 
+                src="https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/public/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif" 
                 alt="Logo MEVAM" 
                 className="h-12 w-12 object-contain rounded-xl shadow-lg shadow-black/20"
                 referrerPolicy="no-referrer"

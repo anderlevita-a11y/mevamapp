@@ -66,7 +66,7 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
                 className="w-12 h-12 rounded-xl object-contain bg-black border border-stone-700 shadow-md"
                 onError={(e) => {
                   // Fallback to Supabase image if static file is loading
-                  (e.currentTarget as HTMLImageElement).src = 'https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/sign/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif?token=eyJraWQiOiI3MTg0NDIzOS05ZGQ3LTQ3NzQtOTA2Ny1mZmE3MjVmM2QzOGYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiYW5uZXIvR2VtaW5pX0dlbmVyYXRlZF9JbWFnZV85cHNwYzY5cHNwYzY5cHNwLmpmaWYiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4NzA2MjMxLCJleHAiOjE4MjAyNDIyMzF9.C-fP_iVbjIac8cyKK_7Jvvu2eaQgcS74W4VANvjAfzA';
+                  (e.currentTarget as HTMLImageElement).src = 'https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/public/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif';
                 }}
               />
               <span className="absolute -bottom-1 -right-1 bg-amber-500 text-stone-950 p-0.5 rounded-full ring-2 ring-stone-900">
@@ -133,7 +133,7 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({
                   alt="MEVAM Itapema Sertão"
                   className="w-12 h-12 rounded-2xl object-contain bg-black border border-stone-700 shadow-md"
                   onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src = 'https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/sign/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif?token=eyJraWQiOiI3MTg0NDIzOS05ZGQ3LTQ3NzQtOTA2Ny1mZmE3MjVmM2QzOGYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiYW5uZXIvR2VtaW5pX0dlbmVyYXRlZF9JbWFnZV85cHNwYzY5cHNwYzY5cHNwLmpmaWYiLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg4NzA2MjMxLCJleHAiOjE4MjAyNDIyMzF9.C-fP_iVbjIac8cyKK_7Jvvu2eaQgcS74W4VANvjAfzA';
+                    (e.currentTarget as HTMLImageElement).src = 'https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/public/banner/Gemini_Generated_Image_9pspc69pspc69psp.jfif';
                   }}
                 />
                 <div>
