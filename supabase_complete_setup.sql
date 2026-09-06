@@ -555,6 +555,30 @@ CREATE TRIGGER on_profile_role_updated
   AFTER UPDATE OF role ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.sync_user_role();
 
+-- 3.3 Impede que um usuário altere o próprio "role" (autopromoção a admin
+-- via chamada direta à API). Roda ANTES do sync acima; se quem faz a
+-- alteração não é admin, o role é revertido/forçado para 'member'.
+CREATE OR REPLACE FUNCTION public.prevent_role_self_escalation()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.role IS DISTINCT FROM OLD.role AND NOT public.is_admin() THEN
+      NEW.role := OLD.role;
+    END IF;
+  ELSIF TG_OP = 'INSERT' THEN
+    IF NEW.role IS DISTINCT FROM 'member' AND NOT public.is_admin() THEN
+      NEW.role := 'member';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS prevent_role_self_escalation_trigger ON public.profiles;
+CREATE TRIGGER prevent_role_self_escalation_trigger
+  BEFORE INSERT OR UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.prevent_role_self_escalation();
+
 
 -- ==========================================
 -- 4. ATIVAÇÃO DE SECURITY POLICIES (RLS)
@@ -742,9 +766,10 @@ CREATE POLICY "Users can view their own consent log" ON privacy_consent_log FOR 
 CREATE POLICY "Users can insert their own consent logs" ON privacy_consent_log FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- 5.15 Políticas para Page Visits
-CREATE POLICY "Public can increment visits" ON page_visits FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public can update visits" ON page_visits FOR UPDATE USING (true);
-CREATE POLICY "Admins can view visits" ON page_visits FOR SELECT USING (true);
+-- Sem policy de INSERT/UPDATE: a contagem é feita exclusivamente pela função
+-- increment_page_visit() (SECURITY DEFINER, seção 2.2), que não depende de
+-- permissão de escrita direta na tabela. Apenas admins podem ler os números.
+CREATE POLICY "Admins can view visits" ON page_visits FOR SELECT TO authenticated USING (is_admin());
 
 -- 5.16 Políticas de Indisponibilidade de Voluntários
 CREATE POLICY "Users can manage own unavailability" ON user_unavailability FOR ALL USING (auth.uid() = user_id);

@@ -7512,19 +7512,26 @@ DROP POLICY IF EXISTS "Public can view church_services" ON public.church_service
 DROP POLICY IF EXISTS "Enable insert for church_services" ON public.church_services;
 DROP POLICY IF EXISTS "Enable update for church_services" ON public.church_services;
 DROP POLICY IF EXISTS "Enable delete for church_services" ON public.church_services;
+DROP POLICY IF EXISTS "Staff can insert church_services" ON public.church_services;
+DROP POLICY IF EXISTS "Staff can update church_services" ON public.church_services;
+DROP POLICY IF EXISTS "Staff can delete church_services" ON public.church_services;
 
--- 4. Criação das políticas de acesso
-CREATE POLICY "Public can view church_services" 
+-- 4. Criação das políticas de acesso (leitura pública, escrita só admin/pastor)
+CREATE POLICY "Public can view church_services"
   ON public.church_services FOR SELECT USING (true);
 
-CREATE POLICY "Enable insert for church_services" 
-  ON public.church_services FOR INSERT WITH CHECK (true);
+CREATE POLICY "Staff can insert church_services"
+  ON public.church_services FOR INSERT TO authenticated
+  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
 
-CREATE POLICY "Enable update for church_services" 
-  ON public.church_services FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Staff can update church_services"
+  ON public.church_services FOR UPDATE TO authenticated
+  USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'))
+  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
 
-CREATE POLICY "Enable delete for church_services" 
-  ON public.church_services FOR DELETE USING (true);
+CREATE POLICY "Staff can delete church_services"
+  ON public.church_services FOR DELETE TO authenticated
+  USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
 
 -- 5. Inserção dos cultos oficiais iniciais da MEVAM Itapema Sertão
 INSERT INTO public.church_services (title, day_of_week, day_short, time, description, badge_text, color, order_index, is_active)
@@ -7609,11 +7616,14 @@ DROP POLICY IF EXISTS "Public can view church_services" ON public.church_service
 DROP POLICY IF EXISTS "Enable insert for church_services" ON public.church_services;
 DROP POLICY IF EXISTS "Enable update for church_services" ON public.church_services;
 DROP POLICY IF EXISTS "Enable delete for church_services" ON public.church_services;
+DROP POLICY IF EXISTS "Staff can insert church_services" ON public.church_services;
+DROP POLICY IF EXISTS "Staff can update church_services" ON public.church_services;
+DROP POLICY IF EXISTS "Staff can delete church_services" ON public.church_services;
 
 CREATE POLICY "Public can view church_services" ON public.church_services FOR SELECT USING (true);
-CREATE POLICY "Enable insert for church_services" ON public.church_services FOR INSERT WITH CHECK (true);
-CREATE POLICY "Enable update for church_services" ON public.church_services FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Enable delete for church_services" ON public.church_services FOR DELETE USING (true);`}</pre>
+CREATE POLICY "Staff can insert church_services" ON public.church_services FOR INSERT TO authenticated WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
+CREATE POLICY "Staff can update church_services" ON public.church_services FOR UPDATE TO authenticated USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor')) WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
+CREATE POLICY "Staff can delete church_services" ON public.church_services FOR DELETE TO authenticated USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));`}</pre>
                               </div>
 
                               <div className="flex justify-end pt-2">
@@ -8148,20 +8158,23 @@ DROP POLICY IF EXISTS "Public can view announcements" ON public.announcements;
 DROP POLICY IF EXISTS "Enable insert for announcements" ON public.announcements;
 DROP POLICY IF EXISTS "Enable update for announcements" ON public.announcements;
 DROP POLICY IF EXISTS "Enable delete for announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Staff can insert announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Staff can update announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Staff can delete announcements" ON public.announcements;
 
 CREATE POLICY "Public can view announcements" ON public.announcements FOR SELECT USING (true);
-CREATE POLICY "Enable insert for announcements" ON public.announcements FOR INSERT WITH CHECK (true);
-CREATE POLICY "Enable update for announcements" ON public.announcements FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Enable delete for announcements" ON public.announcements FOR DELETE USING (true);
+CREATE POLICY "Staff can insert announcements" ON public.announcements FOR INSERT TO authenticated WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
+CREATE POLICY "Staff can update announcements" ON public.announcements FOR UPDATE TO authenticated USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor')) WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
+CREATE POLICY "Staff can delete announcements" ON public.announcements FOR DELETE TO authenticated USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
 
 ALTER TABLE public.ministry_notices ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public can view ministry notices" ON public.ministry_notices;
 DROP POLICY IF EXISTS "Enable insert for ministry notices" ON public.ministry_notices;
 DROP POLICY IF EXISTS "Enable delete for ministry notices" ON public.ministry_notices;
+DROP POLICY IF EXISTS "Leaders can manage ministry notices" ON public.ministry_notices;
 
 CREATE POLICY "Public can view ministry notices" ON public.ministry_notices FOR SELECT USING (true);
-CREATE POLICY "Enable insert for ministry notices" ON public.ministry_notices FOR INSERT WITH CHECK (true);
-CREATE POLICY "Enable delete for ministry notices" ON public.ministry_notices FOR DELETE USING (true);
+CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices FOR ALL TO authenticated USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor') OR EXISTS (SELECT 1 FROM public.user_ministries um WHERE um.ministry_id = ministry_notices.ministry_id AND um.user_id = auth.uid() AND um.is_leader = true)) WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor') OR EXISTS (SELECT 1 FROM public.user_ministries um WHERE um.ministry_id = ministry_notices.ministry_id AND um.user_id = auth.uid() AND um.is_leader = true));
 
 -- Habilitar Realtime para avisos e comunicados
 ALTER PUBLICATION supabase_realtime ADD TABLE public.announcements;
@@ -8203,20 +8216,23 @@ DROP POLICY IF EXISTS "Public can view announcements" ON public.announcements;
 DROP POLICY IF EXISTS "Enable insert for announcements" ON public.announcements;
 DROP POLICY IF EXISTS "Enable update for announcements" ON public.announcements;
 DROP POLICY IF EXISTS "Enable delete for announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Staff can insert announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Staff can update announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Staff can delete announcements" ON public.announcements;
 
 CREATE POLICY "Public can view announcements" ON public.announcements FOR SELECT USING (true);
-CREATE POLICY "Enable insert for announcements" ON public.announcements FOR INSERT WITH CHECK (true);
-CREATE POLICY "Enable update for announcements" ON public.announcements FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Enable delete for announcements" ON public.announcements FOR DELETE USING (true);
+CREATE POLICY "Staff can insert announcements" ON public.announcements FOR INSERT TO authenticated WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
+CREATE POLICY "Staff can update announcements" ON public.announcements FOR UPDATE TO authenticated USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor')) WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
+CREATE POLICY "Staff can delete announcements" ON public.announcements FOR DELETE TO authenticated USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
 
 ALTER TABLE public.ministry_notices ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public can view ministry notices" ON public.ministry_notices;
 DROP POLICY IF EXISTS "Enable insert for ministry notices" ON public.ministry_notices;
 DROP POLICY IF EXISTS "Enable delete for ministry notices" ON public.ministry_notices;
+DROP POLICY IF EXISTS "Leaders can manage ministry notices" ON public.ministry_notices;
 
 CREATE POLICY "Public can view ministry notices" ON public.ministry_notices FOR SELECT USING (true);
-CREATE POLICY "Enable insert for ministry notices" ON public.ministry_notices FOR INSERT WITH CHECK (true);
-CREATE POLICY "Enable delete for ministry notices" ON public.ministry_notices FOR DELETE USING (true);`}</pre>
+CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices FOR ALL TO authenticated USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor') OR EXISTS (SELECT 1 FROM public.user_ministries um WHERE um.ministry_id = ministry_notices.ministry_id AND um.user_id = auth.uid() AND um.is_leader = true)) WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor') OR EXISTS (SELECT 1 FROM public.user_ministries um WHERE um.ministry_id = ministry_notices.ministry_id AND um.user_id = auth.uid() AND um.is_leader = true));`}</pre>
                               </div>
 
                               <div className="flex justify-end pt-2">

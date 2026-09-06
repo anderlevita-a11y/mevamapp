@@ -113,6 +113,30 @@ CREATE TRIGGER on_profile_role_updated
   AFTER UPDATE OF role ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.sync_user_role();
 
+-- Impede que um usuário altere o próprio "role" (ex.: se promover a admin
+-- via chamada direta à API). Roda ANTES do sync acima, revertendo qualquer
+-- mudança feita por quem não é admin.
+CREATE OR REPLACE FUNCTION public.prevent_role_self_escalation()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.role IS DISTINCT FROM OLD.role AND NOT public.is_admin() THEN
+      NEW.role := OLD.role;
+    END IF;
+  ELSIF TG_OP = 'INSERT' THEN
+    IF NEW.role IS DISTINCT FROM 'member' AND NOT public.is_admin() THEN
+      NEW.role := 'member';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+DROP TRIGGER IF EXISTS prevent_role_self_escalation_trigger ON public.profiles;
+CREATE TRIGGER prevent_role_self_escalation_trigger
+  BEFORE INSERT OR UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.prevent_role_self_escalation();
+
 -- 3. Ministries
 CREATE TABLE ministries (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

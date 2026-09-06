@@ -37,13 +37,15 @@ CREATE TABLE IF NOT EXISTS page_visits (
   UNIQUE(page_name, visit_date)
 );
 
--- Policy to allow incrementing the counter safely
+-- Counting is done exclusively through increment_page_visit() (SECURITY DEFINER
+-- below), which bypasses RLS as the table owner. No public write policy is
+-- needed on the table itself, and none is granted here. Only admins can read.
 ALTER TABLE page_visits ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Public can increment visits" ON page_visits FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public can update visits" ON page_visits FOR UPDATE USING (true);
-CREATE POLICY "Admins can view visits" ON page_visits FOR SELECT USING (true);
+CREATE POLICY "Admins can view visits" ON page_visits FOR SELECT TO authenticated USING (public.is_admin());
 
 -- Atomic Increment Function (Idempotent operation)
+-- SECURITY DEFINER so it can write to page_visits without needing a public
+-- INSERT/UPDATE policy on the table (RLS above only grants admin SELECT).
 CREATE OR REPLACE FUNCTION increment_page_visit(p_page_name TEXT, p_visit_date DATE)
 RETURNS void AS $$
 BEGIN
@@ -52,7 +54,7 @@ BEGIN
   ON CONFLICT (page_name, visit_date)
   DO UPDATE SET count = page_visits.count + 1;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Rate Limiting System (Postgres-based)
 CREATE TABLE IF NOT EXISTS action_rate_limits (
