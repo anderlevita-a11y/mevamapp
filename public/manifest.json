@@ -1,0 +1,56 @@
+{
+  "id": "/",
+  "name": "MEVAM Itapema Sertão",
+  "short_name": "MEVAM",
+  "description": "Uma plataforma moderna para conectar a comunidade, compartilhar mensagens e facilitar a vida cristã.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#0c0a09",
+  "background_color": "#0c0a09",
+  "categories": ["lifestyle", "social"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Culto Ao Vivo",
+      "short_name": "Ao Vivo",
+      "description": "Acompanhe as transmissões ao vivo da igreja",
+      "url": "/#aovivo",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Escalas Ministeriais",
+      "short_name": "Escalas",
+      "description": "Confira suas escalas de serviço",
+      "url": "/#escalas",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Grupos de Célula",
+      "short_name": "Células",
+      "description": "Encontre uma célula próxima a você",
+      "url": "/#celulas",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Mevam Itapema Sertão",
+  "description": "Uma plataforma moderna para conectar a comunidade, compartilhar mensagens e facilitar a vida cristã.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
