@@ -407,10 +407,12 @@ CREATE TABLE IF NOT EXISTS mercado_solidario_registrations (
 -- ==========================================
 
 -- 2.1 Função de Verificação Segura de Administrador
+-- auth.jwt() envolto em "(select ...)" por performance: evita reavaliação
+-- linha a linha em RLS (ver performance_optimization_fix.sql / SQL_SETUP.md).
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin';
+  RETURN ((SELECT auth.jwt()) -> 'app_metadata' ->> 'role') = 'admin';
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public;
 

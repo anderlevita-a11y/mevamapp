@@ -52,10 +52,15 @@
 -- ----------------------------------------------------------------------------
 -- 0. Função auxiliar: verifica se o usuário logado é admin OU pastor
 -- ----------------------------------------------------------------------------
+-- auth.jwt() vem envolto em "(select ...)" por performance: sem isso, o
+-- Postgres pode reavaliar a chamada linha a linha em vez de uma vez só por
+-- consulta (ver seção "Auth RLS Initialization Plan" nos Advisors do
+-- Supabase). Como toda policy chama esta função em vez de auth.jwt()
+-- diretamente, a otimização se propaga para todas de uma vez.
 CREATE OR REPLACE FUNCTION public.is_admin_or_pastor()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor');
+  RETURN ((SELECT auth.jwt()) -> 'app_metadata' ->> 'role') IN ('admin', 'pastor');
 END;
 $$ LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public;
 
@@ -146,7 +151,7 @@ CREATE POLICY "Staff can insert ministry notices" ON public.ministry_notices
     OR EXISTS (
       SELECT 1 FROM public.user_ministries um
       WHERE um.ministry_id = ministry_notices.ministry_id
-        AND um.user_id = auth.uid()
+        AND um.user_id = (select auth.uid())
         AND um.is_leader = true
     )
   );
@@ -157,7 +162,7 @@ CREATE POLICY "Staff can update ministry notices" ON public.ministry_notices
     OR EXISTS (
       SELECT 1 FROM public.user_ministries um
       WHERE um.ministry_id = ministry_notices.ministry_id
-        AND um.user_id = auth.uid()
+        AND um.user_id = (select auth.uid())
         AND um.is_leader = true
     )
   ) WITH CHECK (
@@ -165,7 +170,7 @@ CREATE POLICY "Staff can update ministry notices" ON public.ministry_notices
     OR EXISTS (
       SELECT 1 FROM public.user_ministries um
       WHERE um.ministry_id = ministry_notices.ministry_id
-        AND um.user_id = auth.uid()
+        AND um.user_id = (select auth.uid())
         AND um.is_leader = true
     )
   );
@@ -176,7 +181,7 @@ CREATE POLICY "Staff can delete ministry notices" ON public.ministry_notices
     OR EXISTS (
       SELECT 1 FROM public.user_ministries um
       WHERE um.ministry_id = ministry_notices.ministry_id
-        AND um.user_id = auth.uid()
+        AND um.user_id = (select auth.uid())
         AND um.is_leader = true
     )
   );
@@ -250,7 +255,7 @@ DROP POLICY IF EXISTS "Staff can manage all registrations" ON public.congress_re
 
 CREATE POLICY "Staff and owners can view registrations" ON public.congress_registrations
   FOR SELECT TO authenticated
-  USING (public.is_admin_or_pastor() OR auth.uid() = user_id);
+  USING (public.is_admin_or_pastor() OR (select auth.uid()) = user_id);
 
 CREATE POLICY "Staff can manage all registrations" ON public.congress_registrations
   FOR ALL TO authenticated

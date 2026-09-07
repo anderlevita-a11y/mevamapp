@@ -16205,6 +16205,20 @@ export default function App() {
     let subscription: any = null;
     let realtimeChannel: any = null;
 
+    // Várias tabelas escutam mudanças em tempo real e chamam fetchHomeContent()
+    // (9 consultas). Sem debounce, uma sequência de escritas próximas (ex:
+    // admin editando vários avisos seguidos) dispara um fetch completo pra
+    // CADA evento, em TODO cliente conectado. O debounce colapsa rajadas de
+    // eventos em uma única busca.
+    let homeContentDebounceTimer: any = null;
+    const debouncedFetchHomeContent = () => {
+      if (homeContentDebounceTimer) clearTimeout(homeContentDebounceTimer);
+      homeContentDebounceTimer = setTimeout(() => {
+        homeContentDebounceTimer = null;
+        fetchHomeContent();
+      }, 800);
+    };
+
     if (isSupabaseConfigured) {
       // onAuthStateChange with INITIAL_SESSION handles both mount and updates in v2
       const { data: { subscription: sub } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -16234,76 +16248,82 @@ export default function App() {
       try {
         realtimeChannel = supabase.channel('mevam-public-realtime')
           .on('broadcast', { event: 'content_sync' }, (payload: any) => {
+            // O broadcast de church_services já traz os dados atualizados no
+            // próprio payload — atualiza o estado direto, sem precisar
+            // refazer as 9 consultas de fetchHomeContent() de novo.
             if (payload?.payload?.table === 'church_services' && Array.isArray(payload?.payload?.services)) {
               setChurchServices(payload.payload.services);
               try {
                 localStorage.setItem('mevam_cached_church_services', JSON.stringify(payload.payload.services));
                 localStorage.setItem('mevam_church_services_initialized', 'true');
               } catch (e) {}
+              return;
             }
-            fetchHomeContent();
+            debouncedFetchHomeContent();
           })
           .on(
+            // Fallback de segurança para mudanças em church_services que não
+            // passaram pelo broadcast acima (ex: edição direta no banco).
             'postgres_changes',
             { event: '*', schema: 'public', table: 'church_services' },
             () => {
-              fetchHomeContent();
+              debouncedFetchHomeContent();
             }
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'announcements' },
             () => {
-              fetchHomeContent();
+              debouncedFetchHomeContent();
             }
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'events_carousel' },
             () => {
-              fetchHomeContent();
+              debouncedFetchHomeContent();
             }
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'media_contents' },
             () => {
-              fetchHomeContent();
+              debouncedFetchHomeContent();
             }
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'live_stream' },
             () => {
-              fetchHomeContent();
+              debouncedFetchHomeContent();
             }
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'congresses' },
             () => {
-              fetchHomeContent();
+              debouncedFetchHomeContent();
             }
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'cell_groups' },
             () => {
-              fetchHomeContent();
+              debouncedFetchHomeContent();
             }
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'app_settings' },
             () => {
-              fetchHomeContent();
+              debouncedFetchHomeContent();
             }
           )
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'cantina_products' },
             () => {
-              fetchHomeContent();
+              debouncedFetchHomeContent();
             }
           )
           .subscribe();
@@ -16360,6 +16380,7 @@ export default function App() {
         supabase.removeChannel(realtimeChannel);
       }
       if (subscription) subscription.unsubscribe();
+      if (homeContentDebounceTimer) clearTimeout(homeContentDebounceTimer);
       clearTimeout(boundaryTimer);
     };
   }, []);

@@ -27,22 +27,28 @@ Rode nesta ordem, no **SQL Editor** do painel do Supabase:
 4. **`weekly_repository_schema.sql`** — opcional, só para popular o
    conteúdo padrão do Repositório Semanal (as tabelas que ele cria já vêm
    do passo 1).
-5. **`security_rls_fix.sql`** — SEMPRE rode por último. Concentra todas as
-   correções de segurança (escalação de privilégio em `profiles.role`,
-   políticas de escrita abertas, vazamento de PII em inscrições de
-   congresso, etc.), independente de qual histórico o banco tem.
+5. **`security_rls_fix.sql`** — correções de segurança (escalação de
+   privilégio em `profiles.role`, políticas de escrita abertas, vazamento
+   de PII em inscrições de congresso, etc.), independente de qual
+   histórico o banco tem.
+6. **`performance_optimization_fix.sql`** — SEMPRE rode por último. Cria os
+   índices que faltam e otimiza as policies de RLS (wrapper `(select
+   auth.uid())`) — resolve o alerta "exhausting multiple resources" do
+   Supabase e consultas/login lentos.
 
 ## Projeto já existente (produção atual)
 
-Você não precisa rodar os passos 1–4 de novo (as tabelas já existem). Rode
-só:
+Você não precisa rodar os passos 1–4 de novo (as tabelas já existem). Rode,
+nesta ordem:
 
 ```
 security_rls_fix.sql
+performance_optimization_fix.sql
 ```
 
-Ele é idempotente — pode rodar quantas vezes for preciso. Depois, confira em
-**Database → Advisors → Security** no painel do Supabase.
+Ambos são idempotentes — podem rodar quantas vezes for preciso. Depois,
+confira em **Database → Advisors → Security** e **Database → Advisors →
+Performance** no painel do Supabase.
 
 ## Arquivos históricos / depreciados
 
