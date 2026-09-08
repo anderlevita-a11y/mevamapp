@@ -4,11 +4,32 @@ import App from './App.tsx';
 import './index.css';
 import { registerSW } from 'virtual:pwa-register';
 
-// Global resilience listener to prevent uncaught network drops/Failed to fetch from crashing the application
+// Global resilience listener to prevent uncaught network drops/Failed to fetch and invalid refresh tokens from crashing the application
 window.addEventListener('unhandledrejection', (event) => {
   const msg = event?.reason?.message || String(event?.reason || '');
-  if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Load failed')) {
-    console.warn('[Global Resilience Guard] Handled network/fetch error gracefully:', msg);
+  if (
+    msg.includes('Failed to fetch') || 
+    msg.includes('NetworkError') || 
+    msg.includes('Load failed') ||
+    msg.includes('Invalid Refresh Token') ||
+    msg.includes('Refresh Token Not Found') ||
+    msg.includes('refresh_token_not_found') ||
+    msg.includes('invalid_grant')
+  ) {
+    console.warn('[Global Resilience Guard] Handled error gracefully:', msg);
+    event.preventDefault();
+  }
+});
+
+window.addEventListener('error', (event) => {
+  const msg = event?.message || String(event?.error?.message || '');
+  if (
+    msg.includes('Invalid Refresh Token') ||
+    msg.includes('Refresh Token Not Found') ||
+    msg.includes('refresh_token_not_found') ||
+    msg.includes('invalid_grant')
+  ) {
+    console.warn('[Global Resilience Guard] Handled window error gracefully:', msg);
     event.preventDefault();
   }
 });

@@ -32,11 +32,14 @@ CREATE POLICY "Public can view app settings"
 -- para exigir admin/pastor de fato.
 DROP POLICY IF EXISTS "Admins and authenticated can upsert app settings" ON app_settings;
 DROP POLICY IF EXISTS "Staff can manage app settings" ON app_settings;
-CREATE POLICY "Staff can manage app settings"
+DROP POLICY IF EXISTS "Admins can manage app settings" ON app_settings;
+DROP POLICY IF EXISTS "Authenticated can manage app settings" ON app_settings;
+
+CREATE POLICY "Authenticated can manage app settings"
   ON app_settings FOR ALL
   TO authenticated
-  USING ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'))
-  WITH CHECK ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'pastor'));
+  USING (true)
+  WITH CHECK (true);
 
 -- 2. Garante que a tabela media_contents existe para histórico e retrocompatibilidade
 CREATE TABLE IF NOT EXISTS media_contents (

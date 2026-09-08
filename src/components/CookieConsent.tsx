@@ -23,20 +23,25 @@ export const CookieConsent = () => {
     setShowBanner(false);
     
     // Persist to DB if user is logged in
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      await supabase.from('profiles').update({
-        cookie_consent_accepted: true,
-        cookie_consent_at: new Date().toISOString()
-      }).eq('id', session.user.id);
-      
-      // Log for audit
-      await supabase.from('privacy_consent_log').insert([{
-        user_id: session.user.id,
-        consent_type: 'cookies',
-        action: 'accept',
-        user_agent: navigator.userAgent
-      }]);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const session = data?.session;
+      if (session?.user) {
+        await supabase.from('profiles').update({
+          cookie_consent_accepted: true,
+          cookie_consent_at: new Date().toISOString()
+        }).eq('id', session.user.id);
+        
+        // Log for audit
+        await supabase.from('privacy_consent_log').insert([{
+          user_id: session.user.id,
+          consent_type: 'cookies',
+          action: 'accept',
+          user_agent: navigator.userAgent
+        }]);
+      }
+    } catch (e) {
+      console.info('[CookieConsent] Sessão não ativa ou offline:', e);
     }
 
     window.dispatchEvent(new CustomEvent('analytics-allowed'));
@@ -49,19 +54,24 @@ export const CookieConsent = () => {
     setShowBanner(false);
 
     // Persist to DB if user is logged in
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      await supabase.from('profiles').update({
-        cookie_consent_accepted: false,
-        cookie_consent_at: new Date().toISOString()
-      }).eq('id', session.user.id);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const session = data?.session;
+      if (session?.user) {
+        await supabase.from('profiles').update({
+          cookie_consent_accepted: false,
+          cookie_consent_at: new Date().toISOString()
+        }).eq('id', session.user.id);
 
-      await supabase.from('privacy_consent_log').insert([{
-        user_id: session.user.id,
-        consent_type: 'cookies',
-        action: 'decline',
-        user_agent: navigator.userAgent
-      }]);
+        await supabase.from('privacy_consent_log').insert([{
+          user_id: session.user.id,
+          consent_type: 'cookies',
+          action: 'decline',
+          user_agent: navigator.userAgent
+        }]);
+      }
+    } catch (e) {
+      console.info('[CookieConsent] Sessão não ativa ou offline:', e);
     }
 
     console.log('Analytics declined by user.');

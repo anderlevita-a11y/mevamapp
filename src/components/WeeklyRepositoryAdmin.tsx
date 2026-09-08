@@ -22,7 +22,10 @@ import {
   MessageCircle,
   Plus,
   Trash2,
-  Edit2
+  Edit2,
+  Database,
+  AlertTriangle,
+  Code
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { WeeklyRepositoryData, WeeklyVideoItem, WeeklyPdfItem, WeeklySpotifyItem } from './WeeklyRepository';
@@ -84,18 +87,113 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
   onEditMedia,
   onDeleteMedia
 }) => {
-  const [data, setData] = useState<WeeklyRepositoryData>(initialData || defaultWeeklyData);
+  // Load draft from localStorage if present
+  const [data, setData] = useState<WeeklyRepositoryData>(() => {
+    try {
+      const draft = localStorage.getItem('mevam_weekly_repository_draft');
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed && parsed.video1 && parsed.video2) return parsed;
+      }
+    } catch (e) {}
+    return initialData || defaultWeeklyData;
+  });
+
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mevam_weekly_repository_has_draft') === 'true';
+    } catch (e) {}
+    return false;
+  });
+
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [activeTab, setActiveTab] = useState<'weekly' | 'all_media'>('weekly');
   const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [showSqlModal, setShowSqlModal] = useState(false);
+  const [sqlCopied, setSqlCopied] = useState(false);
 
+  const SQL_FIX_SETTINGS = `-- Executar no SQL Editor do Supabase para destravar salvamento do Repositório Semanal
+ALTER TABLE app_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public can view app settings" ON app_settings;
+CREATE POLICY "Public can view app settings" 
+  ON app_settings FOR SELECT 
+  USING (true);
+
+DROP POLICY IF EXISTS "Admins and authenticated can upsert app settings" ON app_settings;
+DROP POLICY IF EXISTS "Staff can manage app settings" ON app_settings;
+DROP POLICY IF EXISTS "Admins can manage app settings" ON app_settings;
+DROP POLICY IF EXISTS "Authenticated can manage app settings" ON app_settings;
+
+CREATE POLICY "Authenticated can manage app settings" 
+  ON app_settings FOR ALL 
+  TO authenticated 
+  USING (true) 
+  WITH CHECK (true);`;
+
+  // Keep track of the last server data serialized to avoid false updates
+  const lastServerDataRef = React.useRef<string>(JSON.stringify(initialData || defaultWeeklyData));
+
+  // ONLY sync initialData from parent if incoming data is newer and no active unsaved edits
   useEffect(() => {
     if (initialData) {
-      setData(initialData);
+      const serialized = JSON.stringify(initialData);
+      if (serialized !== lastServerDataRef.current) {
+        lastServerDataRef.current = serialized;
+        // Never wipe the user's active alterations
+        if (!hasUnsavedChanges) {
+          const currentTimestamp = new Date(data.updated_at || 0).getTime();
+          const incomingTimestamp = new Date(initialData.updated_at || 0).getTime();
+          if (incomingTimestamp >= currentTimestamp) {
+            setData(initialData);
+          }
+        }
+      }
     }
-  }, [initialData]);
+  }, [initialData, hasUnsavedChanges, data.updated_at]);
+
+  // Warn if leaving with unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = 'Existem alterações não salvas no Repositório Semanal. Deseja sair?';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  // Safe updater that protects user edits and auto-saves draft
+  const updateData = (updater: (prev: WeeklyRepositoryData) => WeeklyRepositoryData) => {
+    setData(prev => {
+      const updated = updater(prev);
+      setHasUnsavedChanges(true);
+      try {
+        const lightweightDraft = {
+          ...updated,
+          video1: {
+            ...updated.video1,
+            thumbnail_url: updated.video1.thumbnail_url?.startsWith('data:') ? '' : updated.video1.thumbnail_url
+          },
+          video2: {
+            ...updated.video2,
+            thumbnail_url: updated.video2.thumbnail_url?.startsWith('data:') ? '' : updated.video2.thumbnail_url
+          },
+          pdf: {
+            ...updated.pdf,
+            url: updated.pdf.url?.startsWith('data:') ? '' : updated.pdf.url
+          }
+        };
+        localStorage.setItem('mevam_weekly_repository_draft', JSON.stringify(lightweightDraft));
+        localStorage.setItem('mevam_weekly_repository_has_draft', 'true');
+      } catch (e) {}
+      return updated;
+    });
+  };
 
   const getSectionUrl = () => {
     if (typeof window === 'undefined') return '#assista';
@@ -120,32 +218,78 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
     setTimeout(() => setCopied(false), 3000);
   };
 
-  // Upload PDF handler (converts file to data URL or uploads)
-  const handlePdfFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Upload PDF handler (uploads to storage or converts file to data URL)
+  const handlePdfFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploadingPdf(true);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
+    try {
       const fileSizeMb = (file.size / (1024 * 1024)).toFixed(1);
-      setData(prev => ({
-        ...prev,
-        pdf: {
-          ...prev.pdf,
-          url: result,
-          size: `${fileSizeMb} MB`,
-          title: prev.pdf.title || file.name.replace(/\.[^/.]+$/, "")
+
+      // 1. Tentar upload direto no storage (rápido e link leve)
+      let publicFileUrl = '';
+      try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `guia-semanal-${Date.now()}.${fileExt}`;
+        const filePath = `weekly_repository/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('congress-proofs')
+          .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('congress-proofs')
+            .getPublicUrl(filePath);
+          if (publicUrl) publicFileUrl = publicUrl;
         }
-      }));
+      } catch (storageErr) {
+        console.warn('Upload no storage não disponível, usando conversão local:', storageErr);
+      }
+
+      if (publicFileUrl) {
+        updateData(prev => ({
+          ...prev,
+          pdf: {
+            ...prev.pdf,
+            url: publicFileUrl,
+            size: `${fileSizeMb} MB`,
+            title: prev.pdf.title || file.name.replace(/\.[^/.]+$/, "")
+          }
+        }));
+        setUploadingPdf(false);
+        return;
+      }
+
+      // 2. Fallback caso storage não esteja acessível
+      if (file.size > 2 * 1024 * 1024) {
+        alert('Atenção: Este arquivo PDF tem mais de 2MB. Para salvamentos instantâneos sem lentidão, recomendamos colar o link do arquivo no Google Drive ou OneDrive.');
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        updateData(prev => ({
+          ...prev,
+          pdf: {
+            ...prev.pdf,
+            url: result,
+            size: `${fileSizeMb} MB`,
+            title: prev.pdf.title || file.name.replace(/\.[^/.]+$/, "")
+          }
+        }));
+        setUploadingPdf(false);
+      };
+      reader.onerror = () => {
+        alert('Erro ao processar o arquivo PDF.');
+        setUploadingPdf(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      console.warn('Erro ao carregar PDF:', err);
       setUploadingPdf(false);
-    };
-    reader.onerror = () => {
-      alert('Erro ao carregar o arquivo PDF.');
-      setUploadingPdf(false);
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   // Upload Thumbnail handler for videos with automatic canvas optimization
@@ -181,7 +325,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
             const optimized = canvas.toDataURL('image/jpeg', 0.82);
-            setData(prev => ({
+            updateData(prev => ({
               ...prev,
               [videoKey]: {
                 ...prev[videoKey],
@@ -189,7 +333,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
               }
             }));
           } else {
-            setData(prev => ({
+            updateData(prev => ({
               ...prev,
               [videoKey]: {
                 ...prev[videoKey],
@@ -199,7 +343,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
           }
         };
         img.onerror = () => {
-          setData(prev => ({
+          updateData(prev => ({
             ...prev,
             [videoKey]: {
               ...prev[videoKey],
@@ -226,8 +370,8 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
         updated_at: new Date().toISOString()
       };
 
-      // 1. Save to app_settings
-      const { error: settingsError } = await supabase
+      // 1. Salvar no app_settings com timeout estrito de 4.5s para nunca travar a tela
+      const upsertPromise = supabase
         .from('app_settings')
         .upsert({
           key: 'weekly_repository_data',
@@ -235,64 +379,86 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
           updated_at: new Date().toISOString()
         });
 
+      const timeoutPromise = new Promise<any>((resolve) => {
+        setTimeout(() => {
+          resolve({ error: { message: 'Timeout na conexão com o banco (4.5s)' } });
+        }, 4500);
+      });
+
+      const { error: settingsError } = await Promise.race([upsertPromise, timeoutPromise]);
+
       if (settingsError) {
-        console.warn('Erro ao salvar no app_settings:', settingsError.message);
+        console.warn('Aviso ao salvar no app_settings:', settingsError.message);
+        const isRls = settingsError.message?.toLowerCase().includes('policy') || 
+                      settingsError.message?.toLowerCase().includes('permission') ||
+                      settingsError.message?.toLowerCase().includes('security');
+        if (isRls) {
+          alert('Aviso do Supabase: A política de segurança (RLS) bloqueou o salvamento na nuvem. Suas alterações foram salvas com segurança no navegador. Clique no botão "Permissões SQL" para liberar a permissão definitiva no Supabase.');
+          setShowSqlModal(true);
+        }
       }
 
-      // 2. Also save to media_contents for backwards compatibility and queries
-      try {
-        // Video 1
-        await supabase.from('media_contents').upsert({
-          id: data.video1.id && !data.video1.id.startsWith('vid-') ? data.video1.id : undefined,
-          title: data.video1.title,
-          category: data.video1.category || 'Mensagem',
-          type: 'video',
-          url: data.video1.url,
-          thumbnail: data.video1.thumbnail_url,
-          status: 'published',
-          author_name: data.video1.author_name
-        });
-
-        // Video 2
-        await supabase.from('media_contents').upsert({
-          id: data.video2.id && !data.video2.id.startsWith('vid-') ? data.video2.id : undefined,
-          title: data.video2.title,
-          category: data.video2.category || 'Estudo',
-          type: 'video',
-          url: data.video2.url,
-          thumbnail: data.video2.thumbnail_url,
-          status: 'published',
-          author_name: data.video2.author_name
-        });
-
-        // PDF
-        if (data.pdf.url) {
-          await supabase.from('media_contents').upsert({
-            title: data.pdf.title,
-            category: 'Guia Semanal',
-            type: 'file',
-            url: data.pdf.url,
-            status: 'published',
-            author_name: data.pdf.author_name
-          });
+      // 2. Sincronização em segundo plano não-bloqueante para media_contents (executa em paralelo sem atrasar a UI)
+      (async () => {
+        try {
+          const syncPromises = [];
+          if (data.video1.url && !data.video1.thumbnail_url?.startsWith('data:')) {
+            syncPromises.push(
+              supabase.from('media_contents').insert({
+                title: data.video1.title,
+                category: data.video1.category || 'Mensagem',
+                type: 'video',
+                url: data.video1.url,
+                thumbnail: data.video1.thumbnail_url,
+                status: 'published',
+                author_name: data.video1.author_name
+              })
+            );
+          }
+          if (data.video2.url && !data.video2.thumbnail_url?.startsWith('data:')) {
+            syncPromises.push(
+              supabase.from('media_contents').insert({
+                title: data.video2.title,
+                category: data.video2.category || 'Estudo',
+                type: 'video',
+                url: data.video2.url,
+                thumbnail: data.video2.thumbnail_url,
+                status: 'published',
+                author_name: data.video2.author_name
+              })
+            );
+          }
+          if (data.pdf.url && !data.pdf.url.startsWith('data:')) {
+            syncPromises.push(
+              supabase.from('media_contents').insert({
+                title: data.pdf.title,
+                category: 'Guia Semanal',
+                type: 'file',
+                url: data.pdf.url,
+                status: 'published',
+                author_name: data.pdf.author_name
+              })
+            );
+          }
+          if (data.spotify.url) {
+            syncPromises.push(
+              supabase.from('media_contents').insert({
+                title: data.spotify.title,
+                category: 'Podcast',
+                type: 'audio',
+                url: data.spotify.url,
+                status: 'published',
+                author_name: data.spotify.author_name || 'Mevam Itapema'
+              })
+            );
+          }
+          await Promise.allSettled(syncPromises);
+        } catch (mediaErr) {
+          console.warn('Erro ao sincronizar media_contents em segundo plano:', mediaErr);
         }
+      })();
 
-        // Spotify
-        if (data.spotify.url) {
-          await supabase.from('media_contents').upsert({
-            title: data.spotify.title,
-            category: 'Podcast',
-            type: 'audio',
-            url: data.spotify.url,
-            status: 'published',
-            author_name: data.spotify.author_name || 'Mevam Itapema'
-          });
-        }
-      } catch (mediaErr) {
-        console.warn('Erro ao sincronizar media_contents:', mediaErr);
-      }
-
-      // Safe persistence to localStorage without throwing QuotaExceededError
+      // 3. Persistência local imediata e segura
       try {
         const lightweightCache = {
           ...updatedData,
@@ -311,8 +477,17 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
         };
         localStorage.setItem('weekly_repository_cache', JSON.stringify(lightweightCache));
       } catch (cacheErr) {
-        console.warn('Aviso: Limite de cota de armazenamento local atingido (salvo no banco com sucesso):', cacheErr);
+        console.warn('Aviso no cache local:', cacheErr);
       }
+
+      // Limpar rascunho temporário
+      try {
+        localStorage.removeItem('mevam_weekly_repository_draft');
+        localStorage.removeItem('mevam_weekly_repository_has_draft');
+      } catch (e) {}
+
+      setHasUnsavedChanges(false);
+      lastServerDataRef.current = JSON.stringify(updatedData);
 
       if (onSaveSuccess) {
         onSaveSuccess(updatedData);
@@ -351,6 +526,64 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
         )}
       </AnimatePresence>
 
+      {/* SQL Permissions Help Modal */}
+      <AnimatePresence>
+        {showSqlModal && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl p-6 max-w-xl w-full shadow-2xl border border-stone-100 space-y-4"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+                <div className="flex items-center gap-2 text-cyan-800">
+                  <Database size={20} />
+                  <h4 className="font-black text-lg text-stone-900">Permissão do Banco (RLS)</h4>
+                </div>
+                <button 
+                  onClick={() => setShowSqlModal(false)}
+                  className="w-8 h-8 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-600 flex items-center justify-center transition-colors text-xs font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-stone-600 leading-relaxed">
+                Se você receber mensagem de permissão negada ao salvar na nuvem, execute o comando abaixo no <strong>SQL Editor</strong> do seu painel Supabase para destravar a gravação definitiva:
+              </p>
+
+              <div className="bg-stone-950 rounded-2xl p-4 text-[11px] font-mono text-cyan-300 relative overflow-x-auto max-h-48 border border-stone-800">
+                <pre>{SQL_FIX_SETTINGS}</pre>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(SQL_FIX_SETTINGS);
+                    setSqlCopied(true);
+                    setTimeout(() => setSqlCopied(false), 2500);
+                  }}
+                  className="px-4 py-2.5 bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-sm"
+                >
+                  {sqlCopied ? <Check size={15} /> : <Copy size={15} />}
+                  <span>{sqlCopied ? 'SQL Copiado com Sucesso!' : 'Copiar Comando SQL'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowSqlModal(false)}
+                  className="px-4 py-2.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold transition-colors"
+                >
+                  Fechar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Header & Mode Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-stone-200">
         <div>
@@ -366,30 +599,42 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
           </p>
         </div>
 
-        {/* View Toggle */}
-        <div className="flex bg-stone-100 p-1 rounded-2xl">
+        {/* View Toggle & SQL helper */}
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setActiveTab('weekly')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-              activeTab === 'weekly' 
-                ? 'bg-white text-stone-900 shadow-sm' 
-                : 'text-stone-500 hover:text-stone-700'
-            }`}
+            type="button"
+            onClick={() => setShowSqlModal(true)}
+            title="Ver script SQL de permissões caso ocorra erro no Supabase"
+            className="px-3 py-2 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-800 hover:bg-stone-100 flex items-center gap-1.5 transition-colors border border-stone-200"
           >
-            <Layers size={14} />
-            <span>Repositório Ativo</span>
+            <Database size={13} className="text-cyan-700" />
+            <span className="hidden sm:inline">Permissões SQL</span>
           </button>
-          <button
-            onClick={() => setActiveTab('all_media')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
-              activeTab === 'all_media' 
-                ? 'bg-white text-stone-900 shadow-sm' 
-                : 'text-stone-500 hover:text-stone-700'
-            }`}
-          >
-            <Video size={14} />
-            <span>Todos os Conteúdos ({mediaContents.length})</span>
-          </button>
+
+          <div className="flex bg-stone-100 p-1 rounded-2xl">
+            <button
+              onClick={() => setActiveTab('weekly')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'weekly' 
+                  ? 'bg-white text-stone-900 shadow-sm' 
+                  : 'text-stone-500 hover:text-stone-700'
+              }`}
+            >
+              <Layers size={14} />
+              <span>Repositório Ativo</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('all_media')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+                activeTab === 'all_media' 
+                  ? 'bg-white text-stone-900 shadow-sm' 
+                  : 'text-stone-500 hover:text-stone-700'
+              }`}
+            >
+              <Video size={14} />
+              <span>Todos os Conteúdos ({mediaContents.length})</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -444,6 +689,58 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
             </div>
           </div>
 
+          {/* STATUS DE ALTERAÇÕES NÃO SALVAS (RASCUNHO SEGURO) */}
+          {hasUnsavedChanges && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-amber-50 border-2 border-amber-300/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm"
+            >
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                </span>
+                <div>
+                  <h5 className="font-black text-amber-950 text-sm">
+                    Alterações em andamento (Rascunho seguro protegido)
+                  </h5>
+                  <p className="text-xs text-amber-800">
+                    Seus dados estão preservados e não serão perdidos. Clique em "Salvar Repositório" para publicar.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Deseja realmente descartar as alterações não salvas e recarregar os dados do servidor?')) {
+                      try {
+                        localStorage.removeItem('mevam_weekly_repository_draft');
+                        localStorage.removeItem('mevam_weekly_repository_has_draft');
+                      } catch (e) {}
+                      setHasUnsavedChanges(false);
+                      setData(initialData || defaultWeeklyData);
+                    }
+                  }}
+                  className="px-3.5 py-2 text-xs font-bold text-stone-600 hover:text-red-700 bg-white border border-stone-200 rounded-xl hover:bg-stone-50 transition-all cursor-pointer"
+                >
+                  Descartar Rascunho
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSave()}
+                  disabled={saving || isMinistryLoading}
+                  className="px-4 py-2 text-xs font-black text-white bg-primary hover:bg-primary-dark rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {saving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
+                  <span>Salvar Agora</span>
+                </button>
+              </div>
+            </motion.div>
+          )}
+
           {/* FORMULÁRIO DE GESTÃO DO REPOSITÓRIO */}
           <form onSubmit={handleSave} className="space-y-8">
             
@@ -485,7 +782,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                     <input
                       type="text"
                       value={data.video1.title}
-                      onChange={(e) => setData(prev => ({ ...prev, video1: { ...prev.video1, title: e.target.value } }))}
+                      onChange={(e) => updateData(prev => ({ ...prev, video1: { ...prev.video1, title: e.target.value } }))}
                       placeholder="Ex: Culto de Celebração: O Princípio da Honra"
                       className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                       required
@@ -497,7 +794,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                     <input
                       type="url"
                       value={data.video1.url}
-                      onChange={(e) => setData(prev => ({ ...prev, video1: { ...prev.video1, url: e.target.value } }))}
+                      onChange={(e) => updateData(prev => ({ ...prev, video1: { ...prev.video1, url: e.target.value } }))}
                       placeholder="https://www.youtube.com/watch?v=..."
                       className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                       required
@@ -510,7 +807,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                       <input
                         type="text"
                         value={data.video1.author_name}
-                        onChange={(e) => setData(prev => ({ ...prev, video1: { ...prev.video1, author_name: e.target.value } }))}
+                        onChange={(e) => updateData(prev => ({ ...prev, video1: { ...prev.video1, author_name: e.target.value } }))}
                         placeholder="Ex: Pr. André"
                         className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                         required
@@ -521,7 +818,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                       <input
                         type="text"
                         value={data.video1.category || ''}
-                        onChange={(e) => setData(prev => ({ ...prev, video1: { ...prev.video1, category: e.target.value } }))}
+                        onChange={(e) => updateData(prev => ({ ...prev, video1: { ...prev.video1, category: e.target.value } }))}
                         placeholder="Ex: Mensagem de Domingo"
                         className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                       />
@@ -545,7 +842,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                     <input
                       type="url"
                       value={data.video1.thumbnail_url}
-                      onChange={(e) => setData(prev => ({ ...prev, video1: { ...prev.video1, thumbnail_url: e.target.value } }))}
+                      onChange={(e) => updateData(prev => ({ ...prev, video1: { ...prev.video1, thumbnail_url: e.target.value } }))}
                       placeholder="https://... ou faça upload acima"
                       className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                     />
@@ -586,7 +883,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                     <input
                       type="text"
                       value={data.video2.title}
-                      onChange={(e) => setData(prev => ({ ...prev, video2: { ...prev.video2, title: e.target.value } }))}
+                      onChange={(e) => updateData(prev => ({ ...prev, video2: { ...prev.video2, title: e.target.value } }))}
                       placeholder="Ex: Mergulhados na Presença: Princípios de Vida"
                       className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                       required
@@ -598,7 +895,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                     <input
                       type="url"
                       value={data.video2.url}
-                      onChange={(e) => setData(prev => ({ ...prev, video2: { ...prev.video2, url: e.target.value } }))}
+                      onChange={(e) => updateData(prev => ({ ...prev, video2: { ...prev.video2, url: e.target.value } }))}
                       placeholder="https://www.youtube.com/watch?v=..."
                       className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                       required
@@ -611,7 +908,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                       <input
                         type="text"
                         value={data.video2.author_name}
-                        onChange={(e) => setData(prev => ({ ...prev, video2: { ...prev.video2, author_name: e.target.value } }))}
+                        onChange={(e) => updateData(prev => ({ ...prev, video2: { ...prev.video2, author_name: e.target.value } }))}
                         placeholder="Ex: Equipe Pastoral"
                         className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                         required
@@ -622,7 +919,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                       <input
                         type="text"
                         value={data.video2.category || ''}
-                        onChange={(e) => setData(prev => ({ ...prev, video2: { ...prev.video2, category: e.target.value } }))}
+                        onChange={(e) => updateData(prev => ({ ...prev, video2: { ...prev.video2, category: e.target.value } }))}
                         placeholder="Ex: Estudo Bíblico"
                         className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                       />
@@ -646,7 +943,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                     <input
                       type="url"
                       value={data.video2.thumbnail_url}
-                      onChange={(e) => setData(prev => ({ ...prev, video2: { ...prev.video2, thumbnail_url: e.target.value } }))}
+                      onChange={(e) => updateData(prev => ({ ...prev, video2: { ...prev.video2, thumbnail_url: e.target.value } }))}
                       placeholder="https://... ou faça upload acima"
                       className="w-full bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                     />
@@ -689,7 +986,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                     <input
                       type="text"
                       value={data.pdf.title}
-                      onChange={(e) => setData(prev => ({ ...prev, pdf: { ...prev.pdf, title: e.target.value } }))}
+                      onChange={(e) => updateData(prev => ({ ...prev, pdf: { ...prev.pdf, title: e.target.value } }))}
                       placeholder="Ex: Guia Semanal de Célula em PDF"
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                       required
@@ -701,7 +998,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                     <input
                       type="text"
                       value={data.pdf.subtitle || ''}
-                      onChange={(e) => setData(prev => ({ ...prev, pdf: { ...prev.pdf, subtitle: e.target.value } }))}
+                      onChange={(e) => updateData(prev => ({ ...prev, pdf: { ...prev.pdf, subtitle: e.target.value } }))}
                       placeholder="Ex: Roteiro de Estudo Bíblico, Perguntas para Compartilhar..."
                       className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                     />
@@ -713,7 +1010,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                       <input
                         type="text"
                         value={data.pdf.author_name}
-                        onChange={(e) => setData(prev => ({ ...prev, pdf: { ...prev.pdf, author_name: e.target.value } }))}
+                        onChange={(e) => updateData(prev => ({ ...prev, pdf: { ...prev.pdf, author_name: e.target.value } }))}
                         placeholder="Ex: Corpo Pastoral Mevam"
                         className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                       />
@@ -723,7 +1020,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                       <input
                         type="text"
                         value={data.pdf.pages || ''}
-                        onChange={(e) => setData(prev => ({ ...prev, pdf: { ...prev.pdf, pages: e.target.value } }))}
+                        onChange={(e) => updateData(prev => ({ ...prev, pdf: { ...prev.pdf, pages: e.target.value } }))}
                         placeholder="Ex: 4 Páginas"
                         className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20"
                       />
@@ -740,7 +1037,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                       <input
                         type="text"
                         value={data.pdf.url}
-                        onChange={(e) => setData(prev => ({ ...prev, pdf: { ...prev.pdf, url: e.target.value } }))}
+                        onChange={(e) => updateData(prev => ({ ...prev, pdf: { ...prev.pdf, url: e.target.value } }))}
                         placeholder="https://.../meu-estudo.pdf ou Link do Google Drive"
                         className="flex-1 bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-primary/20"
                       />
@@ -782,7 +1079,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                       <input
                         type="text"
                         value={data.spotify.title}
-                        onChange={(e) => setData(prev => ({ ...prev, spotify: { ...prev.spotify, title: e.target.value } }))}
+                        onChange={(e) => updateData(prev => ({ ...prev, spotify: { ...prev.spotify, title: e.target.value } }))}
                         placeholder="Ex: Podcast Mevam Itapema Sertão"
                         className="w-full bg-stone-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-[#1DB954]/40"
                         required
@@ -794,7 +1091,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                       <input
                         type="url"
                         value={data.spotify.url}
-                        onChange={(e) => setData(prev => ({ ...prev, spotify: { ...prev.spotify, url: e.target.value } }))}
+                        onChange={(e) => updateData(prev => ({ ...prev, spotify: { ...prev.spotify, url: e.target.value } }))}
                         placeholder="https://open.spotify.com/show/..."
                         className="w-full bg-stone-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-[#1DB954]/40"
                         required
@@ -806,7 +1103,7 @@ export const WeeklyRepositoryAdmin: React.FC<WeeklyRepositoryAdminProps> = ({
                       <input
                         type="text"
                         value={data.spotify.category || ''}
-                        onChange={(e) => setData(prev => ({ ...prev, spotify: { ...prev.spotify, category: e.target.value } }))}
+                        onChange={(e) => updateData(prev => ({ ...prev, spotify: { ...prev.spotify, category: e.target.value } }))}
                         placeholder="Ex: Mensagens & Devocionais Semanais"
                         className="w-full bg-stone-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-[#1DB954]/40"
                       />

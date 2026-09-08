@@ -762,13 +762,13 @@ export const DEFAULT_CHURCH_SERVICES: ChurchService[] = [
   }
 ];
 
-const NOTIFICATION_SOUND_URL = "https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/sign/banner/e-pra-glorificar-de-pe-igreja.mp3?token=eyJraWQiOiI3MTg0NDIzOS05ZGQ3LTQ3NzQtOTA2Ny1mZmE3MjVmM2QzOGYiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJiYW5uZXIvZS1wcmEtZ2xvcmlmaWNhci1kZS1wZS1pZ3JlamEubXAzIiwic2NvcGUiOiJkb3dubG9hZCIsImlhdCI6MTc4ODQzOTcyOSwiZXhwIjoyMTAzNzk5NzI5fQ.JYrwXYCQSn8CeryWbkmZ2-zzrWOuBxwSekU0VrlM9HI";
+const NOTIFICATION_SOUND_URL = "https://edjewxtfhsiekxiuhmrd.supabase.co/storage/v1/object/public/banner/cool-sound-for-the-sound-of-messages-on-a-smartphone.mp3";
 
 let notificationAudioInstance: HTMLAudioElement | null = null;
 
 const playNotificationSound = () => {
   try {
-    if (!notificationAudioInstance) {
+    if (!notificationAudioInstance || !notificationAudioInstance.src.includes('cool-sound-for-the-sound-of-messages-on-a-smartphone.mp3')) {
       notificationAudioInstance = new Audio(NOTIFICATION_SOUND_URL);
     } else {
       notificationAudioInstance.currentTime = 0;
@@ -1472,7 +1472,15 @@ const MemberArea = ({
   });
   const [isEditingNotice, setIsEditingNotice] = useState(false);
   const [noticeToEdit, setNoticeToEdit] = useState<MinistryNotice | null>(null);
-  const [managementTab, setManagementTab] = useState<'escalas' | 'equipe' | 'carousel' | 'repositorio'>('escalas');
+  const [managementTab, setManagementTab] = useState<'escalas' | 'equipe' | 'carousel' | 'repositorio'>(() => {
+    try {
+      const saved = localStorage.getItem('mevam_management_tab');
+      if (saved && ['escalas', 'equipe', 'carousel', 'repositorio'].includes(saved)) {
+        return saved as any;
+      }
+    } catch (e) {}
+    return 'escalas';
+  });
   const [isMinistryLoading, setIsMinistryLoading] = useState(false);
   const [isConfirmingAccountDelete, setIsConfirmingAccountDelete] = useState(false);
 
@@ -2393,77 +2401,6 @@ const MemberArea = ({
                   </div>
                 </section>
 
-                {/* Live Stream Management for Communication Ministry Members */}
-                {userMinistries.some(um => ministries.find(m => m.id === um.ministry_id)?.name.toLowerCase().includes('comunicação')) && (
-                  <section className="pt-8 border-t border-stone-200">
-                    <div className="bg-primary/5 border border-primary/20 rounded-3xl p-6 md:p-8">
-                      <div className="flex items-center space-x-3 mb-6">
-                        <div className="w-10 h-10 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-                          <Video size={20} />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-stone-900">Transmissão Ao Vivo</h4>
-                          <p className="text-xs text-stone-500">Gerencie o link da live na home page</p>
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        <div>
-                          <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Link da Transmissão (YouTube/Facebook)</label>
-                          <div className="flex flex-col sm:flex-row gap-2">
-                            <input 
-                              type="url" 
-                              value={liveStream?.url || ''}
-                              onChange={(e) => setLiveStream(prev => prev ? { ...prev, url: e.target.value } : { url: e.target.value, is_active: false })}
-                              placeholder="https://youtube.com/live/..."
-                              className="flex-1 bg-white border border-stone-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20"
-                            />
-                            <button 
-                              disabled={isMinistryLoading}
-                              onClick={async () => {
-                                if (!liveStream?.url) {
-                                  alert('Por favor, insira um link válido.');
-                                  return;
-                                }
-                                setIsMinistryLoading(true);
-                                try {
-                                  const { error } = await supabase
-                                    .from('live_stream')
-                                    .upsert({ 
-                                      id: liveStream?.id || undefined,
-                                      url: liveStream.url, 
-                                      is_active: !liveStream.is_active,
-                                      updated_at: new Date().toISOString()
-                                    });
-                                  if (error) throw error;
-                                  fetchUserData(user);
-                                } catch (err) {
-                                  console.error('Error updating live stream:', err);
-                                  alert('Erro ao atualizar transmissão.');
-                                } finally {
-                                  setIsMinistryLoading(false);
-                                }
-                              }}
-                              className={`px-6 py-3 rounded-xl font-bold text-sm transition-all flex items-center justify-center ${
-                                liveStream?.is_active 
-                                  ? 'bg-red-600 text-white hover:bg-red-700' 
-                                  : 'bg-stone-900 text-white hover:bg-black'
-                              } disabled:opacity-50`}
-                            >
-                              {isMinistryLoading ? (
-                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                              ) : (liveStream?.is_active ? 'Encerrar Live' : 'Iniciar Live')}
-                            </button>
-                          </div>
-                          <p className="text-[10px] text-stone-400 mt-2">
-                            Ao clicar em "Iniciar Live", o indicador vermelho aparecerá na home page para todos os usuários.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-                )}
-
                 {userMinistries.filter(m => m.is_leader).length > 0 && (
                   <section className="pt-8 border-t border-stone-200">
                     <div className="flex items-center space-x-2 mb-2">
@@ -2503,7 +2440,12 @@ const MemberArea = ({
                               ].map((tab) => (
                                 <button
                                   key={tab.id}
-                                  onClick={() => setManagementTab(tab.id as any)}
+                                  onClick={() => {
+                                    setManagementTab(tab.id as any);
+                                    try {
+                                      localStorage.setItem('mevam_management_tab', tab.id);
+                                    } catch (e) {}
+                                  }}
                                   className={`flex items-center space-x-2 px-6 py-3 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${
                                     managementTab === tab.id 
                                       ? 'border-primary text-primary' 
@@ -2634,7 +2576,9 @@ const MemberArea = ({
                                       initialData={weeklyRepositoryData}
                                       onSaveSuccess={(savedData) => {
                                         if (setWeeklyRepositoryData) setWeeklyRepositoryData(savedData);
-                                        fetchHomeContent();
+                                        setTimeout(() => {
+                                          fetchHomeContent();
+                                        }, 500);
                                       }}
                                       isMinistryLoading={isMinistryLoading}
                                       setIsMinistryLoading={setIsMinistryLoading}
@@ -5709,7 +5653,7 @@ const PastorArea = ({
     initialCellGroups && initialCellGroups.length > 0 ? initialCellGroups : DEFAULT_CELL_GROUPS
   );
   const [kidsCount, setKidsCount] = useState(0);
-  const [activeSecretariaTab, setActiveSecretariaTab] = useState<'dashboard' | 'members' | 'visitors' | 'financial'>('dashboard');
+  const [activeSecretariaTab, setActiveSecretariaTab] = useState<'dashboard' | 'members' | 'visitors'>('dashboard');
 
   const [allReports, setAllReports] = useState<MinistryReport[]>([]);
   const [allScales, setAllScales] = useState<MinistryScale[]>([]);
@@ -5720,7 +5664,15 @@ const PastorArea = ({
   const [sqlCopied, setSqlCopied] = useState(false);
   const [selectedMinistryForNotice, setSelectedMinistryForNotice] = useState('');
   const [newNoticeForPastors, setNewNoticeForPastors] = useState({ title: '', content: '' });
-  const [pastorViewTab, setPastorViewTab] = useState<'reports' | 'scales' | 'team' | 'notices' | 'ministries' | 'cells' | 'prayer' | 'media' | 'carousel' | 'cultos'>('reports');
+  const [pastorViewTab, setPastorViewTab] = useState<'scales' | 'team' | 'notices' | 'ministries' | 'cells' | 'prayer' | 'media' | 'carousel' | 'cultos'>(() => {
+    try {
+      const saved = localStorage.getItem('mevam_pastor_view_tab');
+      if (saved && ['scales', 'team', 'notices', 'ministries', 'cells', 'prayer', 'media', 'carousel', 'cultos'].includes(saved)) {
+        return saved as any;
+      }
+    } catch (e) {}
+    return 'cultos';
+  });
   const [isAddingCulto, setIsAddingCulto] = useState(false);
   const [isEditingCulto, setIsEditingCulto] = useState(false);
   const [cultoToEdit, setCultoToEdit] = useState<ChurchService | null>(null);
@@ -6241,6 +6193,12 @@ const PastorArea = ({
     if (!isSupabaseConfigured) return;
     setIsDashboardLoading(true);
     setFetchError(null);
+
+    // Watchdog timer: garante que a tela nunca fique travada no spinner por mais de 2.0s
+    const dashboardWatchdog = setTimeout(() => {
+      setIsDashboardLoading(false);
+    }, 2000);
+
     try {
       const { data, error } = await supabase.auth.getUser();
       if (error && (error.message.toLowerCase().includes('refresh token not found') || error.message.toLowerCase().includes('invalid refresh token'))) {
@@ -6255,20 +6213,31 @@ const PastorArea = ({
       }
       setCurrentUser(user);
 
-      console.info('Iniciando busca de dados para Área do Pastor...');
+      console.info('Iniciando busca rápida de dados para Área do Pastor...');
 
-      // 1. Buscar o perfil para garantir que temos o papel (role) atualizado
+      const safeFetch = async (queryPromise: PromiseLike<any>, timeoutMs = 2500) => {
+        try {
+          const timeoutPromise = new Promise<any>((resolve) => {
+            setTimeout(() => {
+              resolve({ data: null, error: new Error('Tempo limite excedido na consulta (2.5s)') });
+            }, timeoutMs);
+          });
+          const res = await Promise.race([queryPromise, timeoutPromise]);
+          return res;
+        } catch (err: any) {
+          console.warn('Aviso na consulta da Área do Pastor:', err?.message || err);
+          return { data: null, error: err };
+        }
+      };
+
+      // 1. Buscar o perfil com timeout curto para não travar
       let myProfile = null;
-      const { data: profileData, error: profileFetchError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      
-      if (profileFetchError) {
-        console.warn('Aviso: Erro ao buscar papel do perfil (RLS pode estar instável):', profileFetchError.message);
-      } else {
-        myProfile = profileData;
+      const profileRes = await safeFetch(
+        supabase.from('profiles').select('role').eq('id', user.id).single(),
+        2000
+      );
+      if (profileRes.data) {
+        myProfile = profileRes.data;
       }
 
       // Verificação de papel via metadados do JWT ou tabela de perfis
@@ -6292,17 +6261,27 @@ const PastorArea = ({
         setUserRole(fetchedRole);
       }
 
-      const safeFetch = async (queryPromise: PromiseLike<any>) => {
-        try {
-          const res = await queryPromise;
-          return res;
-        } catch (err: any) {
-          console.warn('Aviso na consulta da Área do Pastor:', err?.message || err);
-          return { data: null, error: err };
-        }
-      };
-
-      const [ministriesRes, profilesRes, leadershipRes, visitorsRes, kidsRes, financialRes, billsRes, prayerRes, cellsRes, reportsRes, scalesRes, noticesRes, membersRes, mediaRes, plannedVisitsRes, mercadoRes, settingsRes] = await Promise.all([
+      // Consultas paralelas todas protegidas por safeFetch (2.5s max)
+      const [
+        ministriesRes, 
+        profilesRes, 
+        leadershipRes, 
+        visitorsRes, 
+        kidsRes, 
+        financialRes, 
+        billsRes, 
+        prayerRes, 
+        cellsRes, 
+        reportsRes, 
+        scalesRes, 
+        noticesRes, 
+        membersRes, 
+        mediaRes, 
+        plannedVisitsRes, 
+        mercadoRes, 
+        settingsRes,
+        servicesRes
+      ] = await Promise.all([
         safeFetch(supabase.from('ministries').select('*').order('name')),
         safeFetch(supabase.from('profiles').select('*').order('full_name')),
         safeFetch(supabase.from('user_ministries').select('*')),
@@ -6319,52 +6298,84 @@ const PastorArea = ({
         safeFetch(supabase.from('media_contents').select('*').order('created_at', { ascending: false })),
         safeFetch(supabase.from('planned_visits').select('*').order('visit_date', { ascending: true })),
         safeFetch(supabase.from('mercado_solidario_registrations').select('*').order('created_at', { ascending: false })),
-        safeFetch(supabase.from('app_settings').select('*'))
+        safeFetch(supabase.from('app_settings').select('*')),
+        safeFetch(supabase.from('church_services').select('*').order('order_index', { ascending: true }))
       ]);
 
-      // Log errors but don't necessarily crash if they are non-critical
-      const errors = [];
-      if (ministriesRes.error) errors.push(`Ministérios: ${ministriesRes.error.message}`);
-      if (profilesRes.error) {
-        console.warn('Erro ao carregar lista de perfis:', profilesRes.error.message);
-        // Se for erro de recursão e o usuário for admin mestre, ignoramos o erro crítico para permitir o acesso
-        if (!profilesRes.error.message.includes('infinite recursion') || user.email !== 'anderlevita@gmail.com') {
-          errors.push(`Perfis: ${profilesRes.error.message}`);
-        }
+      // População segura dos dados sem travar a interface se alguma tabela falhar
+      if (ministriesRes.data && Array.isArray(ministriesRes.data) && ministriesRes.data.length > 0) {
+        setMinistries(ministriesRes.data);
       }
-      if (leadershipRes.error) {
-        if (!leadershipRes.error.message.includes('infinite recursion') || user.email !== 'anderlevita@gmail.com') {
-          errors.push(`Liderança: ${leadershipRes.error.message}`);
-        }
+      if (profilesRes.data && Array.isArray(profilesRes.data) && profilesRes.data.length > 0) {
+        setProfiles(profilesRes.data);
+      }
+      if (leadershipRes.data && Array.isArray(leadershipRes.data)) {
+        setLeadership(leadershipRes.data);
+      }
+      if (visitorsRes.data && Array.isArray(visitorsRes.data)) {
+        setVisitors(visitorsRes.data);
+      }
+      if (kidsRes.count !== undefined && kidsRes.count !== null) {
+        setKidsCount(kidsRes.count);
+      }
+      if (financialRes.data && Array.isArray(financialRes.data)) {
+        setFinancialTransactions(financialRes.data);
+      }
+      if (billsRes.data && Array.isArray(billsRes.data)) {
+        setBillsPayable(billsRes.data);
+      }
+      if (prayerRes.data && Array.isArray(prayerRes.data)) {
+        setPrayerRequests(prayerRes.data);
+      }
+      if (cellsRes.data && Array.isArray(cellsRes.data)) {
+        setCellGroups(cellsRes.data);
+      }
+      if (reportsRes.data && Array.isArray(reportsRes.data)) {
+        setAllReports(reportsRes.data.map(r => ({ ...r, ministry_name: r.ministries?.name })));
+      }
+      if (scalesRes.data && Array.isArray(scalesRes.data)) {
+        setAllScales(scalesRes.data.map(s => ({ ...s, ministry_name: s.ministries?.name, user_name: s.profiles?.full_name })));
+      }
+      if (noticesRes.data && Array.isArray(noticesRes.data)) {
+        setAllNotices(noticesRes.data.map(n => ({ ...n, ministry_name: n.ministries?.name })));
+      }
+      if (membersRes.data && Array.isArray(membersRes.data)) {
+        setAllMinistryMembers(membersRes.data.map(m => ({ ...m, full_name: m.profiles?.full_name, whatsapp: m.profiles?.whatsapp, ministry_name: m.ministries?.name })));
+      }
+      if (mediaRes.data && Array.isArray(mediaRes.data)) {
+        setMediaContents(mediaRes.data);
+      }
+      if (plannedVisitsRes.data && Array.isArray(plannedVisitsRes.data)) {
+        setPlannedVisits(plannedVisitsRes.data);
+      }
+      if (mercadoRes.data && Array.isArray(mercadoRes.data)) {
+        setMercadoRegistrations(mercadoRes.data);
       }
       
-      if (errors.length > 0) {
-        console.error('Erros críticos detectados:', errors);
-        setFetchError(`Erro ao carregar dados básicos: ${errors.join(', ')}. Verifique se você executou o SQL no Supabase.`);
-        return;
-      }
-
-      setMinistries(ministriesRes.data || []);
-      setProfiles(profilesRes.data || []);
-      setLeadership(leadershipRes.data || []);
-      setVisitors(visitorsRes.data || []);
-      setKidsCount(kidsRes.count || 0);
-      setFinancialTransactions(financialRes.data || []);
-      setBillsPayable(billsRes.data || []);
-      setPrayerRequests(prayerRes.data || []);
-      setCellGroups(cellsRes.data || []);
-      setAllReports(reportsRes.data?.map(r => ({ ...r, ministry_name: r.ministries?.name })) || []);
-      setAllScales(scalesRes.data?.map(s => ({ ...s, ministry_name: s.ministries?.name, user_name: s.profiles?.full_name })) || []);
-      setAllNotices(noticesRes.data?.map(n => ({ ...n, ministry_name: n.ministries?.name })) || []);
-      setAllMinistryMembers(membersRes.data?.map(m => ({ ...m, full_name: m.profiles?.full_name, whatsapp: m.profiles?.whatsapp, ministry_name: m.ministries?.name })) || []);
-      setMediaContents(mediaRes.data || []);
-      setPlannedVisits(plannedVisitsRes.data || []);
-      setMercadoRegistrations(mercadoRes.data || []);
-      
-      if (settingsRes.data) {
+      if (settingsRes.data && Array.isArray(settingsRes.data)) {
         const d = settingsRes.data as any[];
         const weekly = d.find(s => s.key === 'weekly_repository_data');
-        if (weekly && weekly.value) setWeeklyRepositoryData(weekly.value);
+        if (weekly && weekly.value) {
+          try {
+            const cachedRaw = localStorage.getItem('weekly_repository_cache');
+            if (cachedRaw) {
+              const cached = JSON.parse(cachedRaw);
+              const serverTime = new Date(weekly.value.updated_at || 0).getTime();
+              const cachedTime = new Date(cached.updated_at || 0).getTime();
+              if (cachedTime > serverTime) {
+                setWeeklyRepositoryData(cached);
+              } else {
+                setWeeklyRepositoryData(weekly.value);
+                localStorage.setItem('weekly_repository_cache', JSON.stringify(weekly.value));
+              }
+            } else {
+              setWeeklyRepositoryData(weekly.value);
+              localStorage.setItem('weekly_repository_cache', JSON.stringify(weekly.value));
+            }
+          } catch (e) {
+            setWeeklyRepositoryData(weekly.value);
+          }
+        }
         const mercado = d.find(s => s.key === 'mercado_solidario_open');
         if (mercado) setIsMercadoOpen(mercado.value === true);
         const cantina = d.find(s => s.key === 'cantina_enabled');
@@ -6375,7 +6386,6 @@ const PastorArea = ({
         if (date) setCantinaEventDate(date.value || '');
       }
 
-      const servicesRes = await safeFetch(supabase.from('church_services').select('*').order('order_index', { ascending: true }));
       if (servicesRes.data && Array.isArray(servicesRes.data) && servicesRes.data.length > 0) {
         setChurchServices?.(servicesRes.data);
         try {
@@ -6384,8 +6394,9 @@ const PastorArea = ({
       }
     } catch (error: any) {
       console.error('Error fetching data for PastorArea:', error);
-      setFetchError(error.message || 'Ocorreu um erro inesperado ao carregar os dados.');
+      setFetchError(error.message || 'Ocorreu um erro ao carregar os dados.');
     } finally {
+      clearTimeout(dashboardWatchdog);
       setIsDashboardLoading(false);
     }
   };
@@ -7252,7 +7263,6 @@ const PastorArea = ({
                     {[
                       { id: 'cultos', name: 'Cultos & Programação', icon: <Clock size={20} />, color: 'bg-amber-50 text-amber-700' },
                       { id: 'notices', name: 'Avisos', icon: <MessageCircle size={20} />, color: 'bg-amber-50 text-amber-600' },
-                      { id: 'reports', name: 'Relatórios', icon: <FileText size={20} />, color: 'bg-blue-50 text-blue-600' },
                       { id: 'scales', name: 'Escalas', icon: <Calendar size={20} />, color: 'bg-indigo-50 text-indigo-600' },
                       { id: 'team', name: 'Equipes', icon: <Users size={20} />, color: 'bg-purple-50 text-purple-600' },
                       { id: 'ministries', name: 'Ministérios', icon: <Layout size={20} />, color: 'bg-emerald-50 text-emerald-600' },
@@ -7271,7 +7281,12 @@ const PastorArea = ({
                       return (
                         <button
                           key={tab.id}
-                          onClick={() => setPastorViewTab(tab.id as any)}
+                          onClick={() => {
+                            setPastorViewTab(tab.id as any);
+                            try {
+                              localStorage.setItem('mevam_pastor_view_tab', tab.id);
+                            } catch (e) {}
+                          }}
                           className={`relative flex flex-col items-center justify-center p-4 rounded-[24px] transition-all border-2 ${
                             isCurrentActive 
                               ? ((isNotices || isCultos)
@@ -7304,43 +7319,6 @@ const PastorArea = ({
                   </div>
 
                   <div className="space-y-8">
-                    {pastorViewTab === 'reports' && (
-                      <div className="space-y-6">
-                        <h3 className="text-xl font-bold">Relatórios de Ministérios</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {allReports.length > 0 ? allReports.map(report => (
-                            <div key={report.id} className="bg-white p-6 rounded-2xl border border-stone-100 shadow-sm">
-                              <div className="flex justify-between items-start mb-4">
-                                <div>
-                                  <h4 className="font-bold text-stone-900">{report.ministry_name}</h4>
-                                  <p className="text-sm text-primary font-medium">Relatório de {report.month}</p>
-                                </div>
-                                <span className="text-[10px] text-stone-400 uppercase tracking-widest">{new Date(report.created_at).toLocaleDateString('pt-BR')}</span>
-                              </div>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                                <div>
-                                  <p className="text-stone-400 font-bold uppercase text-[10px] tracking-widest mb-1">Eventos Realizados</p>
-                                  <p className="text-stone-700">{report.events_held}</p>
-                                </div>
-                                <div>
-                                  <p className="text-stone-400 font-bold uppercase text-[10px] tracking-widest mb-1">Média de Participantes</p>
-                                  <p className="text-stone-700">{report.avg_participants}</p>
-                                </div>
-                                <div className="md:col-span-2">
-                                  <p className="text-stone-400 font-bold uppercase text-[10px] tracking-widest mb-1">Pontos Positivos</p>
-                                  <p className="text-stone-700">{report.positive_points}</p>
-                                </div>
-                              </div>
-                            </div>
-                          )) : (
-                            <div className="text-center py-12 bg-stone-50 rounded-2xl border border-dashed border-stone-200">
-                              <p className="text-stone-400 italic">Nenhum relatório enviado pelos ministérios.</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
                     {pastorViewTab === 'scales' && (
                       <div className="space-y-8">
                         <div>
@@ -8349,7 +8327,7 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                                   </span>
                                   <div>
                                     <p className="text-xs font-bold text-amber-950">Som de Notificação Ativado</p>
-                                    <p className="text-[11px] text-amber-800">"É pra glorificar de pé, igreja!" tocará na publicação e para os membros.</p>
+                                    <p className="text-[11px] text-amber-800">Som oficial de notificação tocará na publicação e para os membros.</p>
                                   </div>
                                 </div>
                                 <button
@@ -9013,7 +8991,9 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                           initialData={weeklyRepositoryData}
                           onSaveSuccess={(newData) => {
                             if (setWeeklyRepositoryData) setWeeklyRepositoryData(newData);
-                            fetchHomeContent();
+                            setTimeout(() => {
+                              fetchHomeContent();
+                            }, 500);
                           }}
                           isMinistryLoading={isMinistryLoading}
                           setIsMinistryLoading={setIsMinistryLoading}
@@ -10181,7 +10161,7 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                           </div>
                           <div>
                             <h2 className="text-xl sm:text-2xl font-bold">Secretaria</h2>
-                            <p className="text-stone-500 text-sm">Administração, Membros e Finanças</p>
+                            <p className="text-stone-500 text-sm">Administração e Membros</p>
                           </div>
                         </div>
                         
@@ -10203,12 +10183,6 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                             className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold transition-all whitespace-nowrap ${activeSecretariaTab === 'visitors' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
                           >
                             Visitantes
-                          </button>
-                          <button 
-                            onClick={() => setActiveSecretariaTab('financial')}
-                            className={`px-3 sm:px-4 py-2 rounded-lg text-[10px] sm:text-xs font-bold transition-all whitespace-nowrap ${activeSecretariaTab === 'financial' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
-                          >
-                            Financeiro
                           </button>
                         </div>
                       </div>
@@ -10324,12 +10298,6 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                               <p className="text-center py-8 text-stone-400 italic">Nenhuma conta pendente.</p>
                             )}
                           </div>
-                          <button 
-                            onClick={() => setActiveSecretariaTab('financial')}
-                            className="w-full mt-6 py-3 text-sm font-bold text-stone-500 hover:text-stone-900 transition-colors"
-                          >
-                            Gerenciar financeiro
-                          </button>
                         </div>
                       </div>
                     </div>
@@ -10713,352 +10681,6 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                     </div>
                   )}
 
-                  {activeSecretariaTab === 'financial' && (
-                    <div className="space-y-8">
-                      {/* Form for New Transaction */}
-                      {isAddingTransaction && (
-                        <motion.div 
-                          initial={{ opacity: 0, y: -20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-white p-8 rounded-[32px] border border-stone-100 shadow-sm"
-                        >
-                          <h3 className="text-xl font-bold mb-6">Nova Transação</h3>
-                          <form onSubmit={handleAddTransaction} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Descrição</label>
-                              <input 
-                                type="text" 
-                                value={newTransaction.description || ''}
-                                onChange={(e) => setNewTransaction({...newTransaction, description: e.target.value})}
-                                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                                placeholder="Ex: Oferta Culto Domingo"
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Valor (R$)</label>
-                              <input 
-                                type="number" 
-                                step="0.01"
-                                value={newTransaction.amount || ''}
-                                onChange={(e) => setNewTransaction({...newTransaction, amount: parseFloat(e.target.value)})}
-                                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                                placeholder="0,00"
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Tipo</label>
-                              <select 
-                                value={newTransaction.type}
-                                onChange={(e) => setNewTransaction({...newTransaction, type: e.target.value as 'income' | 'expense'})}
-                                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                              >
-                                <option value="income">Entrada</option>
-                                <option value="expense">Saída</option>
-                              </select>
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Categoria</label>
-                              <select 
-                                value={newTransaction.category}
-                                onChange={(e) => setNewTransaction({...newTransaction, category: e.target.value})}
-                                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                              >
-                                <option value="Dízimo">Dízimo</option>
-                                <option value="Oferta">Oferta</option>
-                                <option value="Doação">Doação</option>
-                                <option value="Manutenção">Manutenção</option>
-                                <option value="Eventos">Eventos</option>
-                                <option value="Outros">Outros</option>
-                              </select>
-                            </div>
-                            <div className="lg:col-span-4 flex justify-end gap-3">
-                              <button 
-                                type="button" 
-                                onClick={() => setIsAddingTransaction(false)}
-                                className="px-6 py-3 bg-stone-100 text-stone-600 rounded-xl font-bold text-sm hover:bg-stone-200 transition-all"
-                              >
-                                Cancelar
-                              </button>
-                              <button 
-                                type="submit" 
-                                disabled={isMinistryLoading}
-                                className="px-6 py-3 bg-stone-900 text-white rounded-xl font-bold text-sm hover:bg-black transition-all flex items-center"
-                              >
-                                {isMinistryLoading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />}
-                                Salvar Transação
-                              </button>
-                            </div>
-                          </form>
-                        </motion.div>
-                      )}
-
-                      {/* Form for Editing Transaction */}
-                      {isEditingTransaction && transactionToEdit && (
-                        <motion.div 
-                          initial={{ opacity: 0, y: -20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-white p-8 rounded-[32px] border border-stone-100 shadow-sm ring-2 ring-primary/20"
-                        >
-                          <h3 className="text-xl font-bold mb-6">Editar Transação</h3>
-                          <form onSubmit={handleUpdateTransaction} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Descrição</label>
-                              <input 
-                                type="text" 
-                                value={transactionToEdit.description}
-                                onChange={(e) => setTransactionToEdit({...transactionToEdit, description: e.target.value})}
-                                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Valor (R$)</label>
-                              <input 
-                                type="number" 
-                                step="0.01"
-                                value={transactionToEdit.amount}
-                                onChange={(e) => setTransactionToEdit({...transactionToEdit, amount: parseFloat(e.target.value)})}
-                                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Tipo</label>
-                              <select 
-                                value={transactionToEdit.type}
-                                onChange={(e) => setTransactionToEdit({...transactionToEdit, type: e.target.value as 'income' | 'expense'})}
-                                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                              >
-                                <option value="income">Entrada</option>
-                                <option value="expense">Saída</option>
-                              </select>
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Categoria</label>
-                              <select 
-                                value={transactionToEdit.category}
-                                onChange={(e) => setTransactionToEdit({...transactionToEdit, category: e.target.value})}
-                                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                              >
-                                <option value="Dízimo">Dízimo</option>
-                                <option value="Oferta">Oferta</option>
-                                <option value="Doação">Doação</option>
-                                <option value="Manutenção">Manutenção</option>
-                                <option value="Eventos">Eventos</option>
-                                <option value="Outros">Outros</option>
-                              </select>
-                            </div>
-                            <div className="lg:col-span-4 flex justify-end gap-3">
-                              <button 
-                                type="button" 
-                                onClick={() => {
-                                  setIsEditingTransaction(false);
-                                  setTransactionToEdit(null);
-                                }}
-                                className="px-6 py-3 bg-stone-100 text-stone-600 rounded-xl font-bold text-sm hover:bg-stone-200 transition-all"
-                              >
-                                Cancelar
-                              </button>
-                              <button 
-                                type="submit" 
-                                disabled={isMinistryLoading}
-                                className="px-6 py-3 bg-primary text-white rounded-xl font-bold text-sm hover:bg-primary/90 transition-all flex items-center shadow-lg shadow-primary/20"
-                              >
-                                {isMinistryLoading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />}
-                                Confirmar Alteração
-                              </button>
-                            </div>
-                          </form>
-                        </motion.div>
-                      )}
-
-                      {/* Form for New Bill */}
-                      {isAddingBill && (
-                        <motion.div 
-                          initial={{ opacity: 0, y: -20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-white p-8 rounded-[32px] border border-stone-100 shadow-sm"
-                        >
-                          <h3 className="text-xl font-bold mb-6">Nova Conta a Pagar</h3>
-                          <form onSubmit={handleAddBill} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Descrição</label>
-                              <input 
-                                type="text" 
-                                value={newBill.description || ''}
-                                onChange={(e) => setNewBill({...newBill, description: e.target.value})}
-                                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                                placeholder="Ex: Conta de Luz"
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Valor (R$)</label>
-                              <input 
-                                type="number" 
-                                step="0.01"
-                                value={newBill.amount || ''}
-                                onChange={(e) => setNewBill({...newBill, amount: parseFloat(e.target.value)})}
-                                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                                placeholder="0,00"
-                                required
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <label className="text-xs font-bold text-stone-400 uppercase tracking-widest">Vencimento</label>
-                              <input 
-                                type="date" 
-                                value={newBill.due_date || ''}
-                                onChange={(e) => setNewBill({...newBill, due_date: e.target.value})}
-                                className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-primary/20"
-                                required
-                              />
-                            </div>
-                            <div className="md:col-span-3 flex justify-end gap-3">
-                              <button 
-                                type="button" 
-                                onClick={() => setIsAddingBill(false)}
-                                className="px-6 py-3 bg-stone-100 text-stone-600 rounded-xl font-bold text-sm hover:bg-stone-200 transition-all"
-                              >
-                                Cancelar
-                              </button>
-                              <button 
-                                type="submit" 
-                                disabled={isMinistryLoading}
-                                className="px-6 py-3 bg-stone-900 text-white rounded-xl font-bold text-sm hover:bg-black transition-all flex items-center"
-                              >
-                                {isMinistryLoading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />}
-                                Salvar Conta
-                              </button>
-                            </div>
-                          </form>
-                        </motion.div>
-                      )}
-
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <div className="lg:col-span-2 space-y-6">
-                          <div className="flex items-center justify-between">
-                            <h3 className="text-xl font-bold">Fluxo de Caixa (Entradas e Saídas)</h3>
-                            <div className="flex items-center gap-3">
-                              <button 
-                                onClick={() => setIsGeneratingReport(true)}
-                                className="bg-stone-100 text-stone-600 px-4 py-2 rounded-xl text-xs font-bold flex items-center hover:bg-stone-200 transition-all"
-                              >
-                                <FileText size={14} className="mr-2" /> Gerar Relatório
-                              </button>
-                              <button 
-                                onClick={() => setIsAddingTransaction(true)}
-                                className="bg-stone-900 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center hover:bg-black transition-all"
-                              >
-                                <Plus size={14} className="mr-2" /> Nova Transação
-                              </button>
-                            </div>
-                          </div>
-                          <div className="bg-white rounded-3xl border border-stone-100 overflow-x-auto shadow-sm">
-                            <table className="w-full text-left border-collapse min-w-[800px]">
-                              <thead>
-                                <tr className="bg-stone-50 border-bottom border-stone-100">
-                                  <th className="px-6 py-4 text-xs font-bold text-stone-400 uppercase tracking-widest">Data</th>
-                                  <th className="px-6 py-4 text-xs font-bold text-stone-400 uppercase tracking-widest">Descrição</th>
-                                  <th className="px-6 py-4 text-xs font-bold text-stone-400 uppercase tracking-widest">Categoria</th>
-                                  <th className="px-6 py-4 text-xs font-bold text-stone-400 uppercase tracking-widest text-right">Valor</th>
-                                  <th className="px-6 py-4 text-xs font-bold text-stone-400 uppercase tracking-widest text-right">Ações</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-stone-50">
-                                {financialTransactions.map(transaction => (
-                                  <tr key={transaction.id} className="hover:bg-stone-50/50 transition-colors">
-                                    <td className="px-6 py-4 text-xs text-stone-400">{new Date(transaction.date).toLocaleDateString('pt-BR')}</td>
-                                    <td className="px-6 py-4 font-medium text-stone-900">{transaction.description}</td>
-                                    <td className="px-6 py-4">
-                                      <span className="text-[10px] bg-stone-100 text-stone-500 px-2 py-0.5 rounded-full font-bold uppercase">{transaction.category}</span>
-                                    </td>
-                                    <td className={`px-6 py-4 text-right font-bold ${transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                                      {transaction.type === 'income' ? '+' : '-'} R$ {transaction.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                      <div className="flex items-center justify-end space-x-2">
-                                        <button 
-                                          onClick={() => {
-                                            setTransactionToEdit(transaction);
-                                            setIsEditingTransaction(true);
-                                          }}
-                                          className="p-2 text-stone-400 hover:text-primary hover:bg-primary/5 rounded-xl transition-all"
-                                          title="Editar Transação"
-                                        >
-                                          <Edit2 size={16} />
-                                        </button>
-                                        <button 
-                                          onClick={() => handleDeleteTransaction(transaction.id!)}
-                                          className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                          title="Excluir Transação"
-                                        >
-                                          <Trash2 size={16} />
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                                {financialTransactions.length === 0 && (
-                                  <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-stone-400 italic">Nenhuma transação registrada.</td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-
-                        <div className="space-y-6">
-                          <div className="flex items-center justify-between">
-                            <h3 className="text-xl font-bold">Contas a Pagar</h3>
-                            <button 
-                              onClick={() => setIsAddingBill(true)}
-                              className="text-primary text-xs font-bold hover:underline"
-                            >
-                              Adicionar Conta
-                            </button>
-                          </div>
-                          <div className="space-y-4">
-                            {billsPayable.map(bill => (
-                              <div key={bill.id} className="bg-white p-6 rounded-3xl border border-stone-100 shadow-sm relative overflow-hidden group">
-                                {bill.status === 'paid' && (
-                                  <div className="absolute top-0 right-0 bg-green-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl">PAGO</div>
-                                )}
-                                <div className="flex justify-between items-start mb-4">
-                                  <div>
-                                    <h4 className="font-bold text-stone-900">{bill.description}</h4>
-                                    <p className="text-xs text-stone-500 flex items-center mt-1">
-                                      <Calendar size={12} className="mr-1" /> Vence em {new Date(bill.due_date).toLocaleDateString('pt-BR')}
-                                    </p>
-                                  </div>
-                                  <p className={`font-bold ${bill.status === 'paid' ? 'text-stone-400' : 'text-red-600'}`}>
-                                    R$ {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                  </p>
-                                </div>
-                                {bill.status === 'pending' && (
-                                  <button 
-                                    onClick={() => handleMarkAsPaid(bill.id)}
-                                    className="w-full py-2 bg-stone-900 text-white rounded-xl text-xs font-bold hover:bg-black transition-all"
-                                  >
-                                    Marcar como Pago
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                            {billsPayable.length === 0 && (
-                              <div className="text-center py-12 bg-stone-50 rounded-3xl border border-dashed border-stone-200">
-                                <AlertCircle size={32} className="mx-auto text-stone-300 mb-2" />
-                                <p className="text-stone-400 text-sm italic">Nenhuma conta registrada.</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </motion.div>
@@ -15500,7 +15122,15 @@ export default function App() {
   const [isVisitorModalOpen, setIsVisitorModalOpen] = useState(false);
   const [isPlannedVisitModalOpen, setIsPlannedVisitModalOpen] = useState(false);
   const [mediaContents, setMediaContents] = useState<MediaContent[]>([]);
-  const [weeklyRepositoryData, setWeeklyRepositoryData] = useState<WeeklyRepositoryData | null>(null);
+  const [weeklyRepositoryData, setWeeklyRepositoryData] = useState<WeeklyRepositoryData | null>(() => {
+    try {
+      const cached = localStorage.getItem('weekly_repository_cache');
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (e) {}
+    return null;
+  });
   const [announcements, setAnnouncements] = useState<Announcement[]>(() => {
     try {
       const cached = localStorage.getItem('mevam_cached_announcements');
@@ -16153,7 +15783,27 @@ export default function App() {
       if (!settingsRes.error && Array.isArray(settingsRes.data)) {
         const d = settingsRes.data as any[];
         const weekly = d.find(s => s.key === 'weekly_repository_data');
-        if (weekly && weekly.value) setWeeklyRepositoryData(weekly.value);
+        if (weekly && weekly.value) {
+          try {
+            const cachedRaw = localStorage.getItem('weekly_repository_cache');
+            if (cachedRaw) {
+              const cached = JSON.parse(cachedRaw);
+              const serverTime = new Date(weekly.value.updated_at || 0).getTime();
+              const cachedTime = new Date(cached.updated_at || 0).getTime();
+              if (cachedTime > serverTime) {
+                setWeeklyRepositoryData(cached);
+              } else {
+                setWeeklyRepositoryData(weekly.value);
+                localStorage.setItem('weekly_repository_cache', JSON.stringify(weekly.value));
+              }
+            } else {
+              setWeeklyRepositoryData(weekly.value);
+              localStorage.setItem('weekly_repository_cache', JSON.stringify(weekly.value));
+            }
+          } catch (e) {
+            setWeeklyRepositoryData(weekly.value);
+          }
+        }
         const mercado = d.find(s => s.key === 'mercado_solidario_open');
         if (mercado) setIsMercadoOpen(mercado.value === true);
         const cantina = d.find(s => s.key === 'cantina_enabled');
