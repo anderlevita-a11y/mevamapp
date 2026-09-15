@@ -34,7 +34,7 @@ window.addEventListener('error', (event) => {
   }
 });
 
-// Auto-register service worker for PWA installation and offline caching
+// Auto-register service worker for PWA installation and Web Push notifications
 try {
   registerSW({
     immediate: true,
@@ -47,6 +47,15 @@ try {
   });
 } catch (swErr) {
   console.warn('[MEVAM PWA] Service Worker registration skipped or failed:', swErr);
+}
+
+// Register background Web Push Service Worker (/sw.js)
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then((reg) => console.log('[MEVAM Push] Service Worker registrado:', reg.scope))
+      .catch((err) => console.warn('[MEVAM Push] SW register warning:', err));
+  });
 }
 
 createRoot(document.getElementById('root')!).render(

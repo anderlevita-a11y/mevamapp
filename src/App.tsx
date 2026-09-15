@@ -15,6 +15,7 @@ import { WeeklyRepositoryAdmin } from './components/WeeklyRepositoryAdmin';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { EventListsModal } from './components/EventListsModal';
+import { PushTokensLog } from './components/PushTokensLog';
 import { FolderArchive } from 'lucide-react';
 import { 
   Menu, 
@@ -99,8 +100,18 @@ import {
   HeartHandshake,
   UtensilsCrossed,
   AlertTriangle,
-  ShieldAlert
+  ShieldAlert,
+  Smartphone
 } from 'lucide-react';
+import { 
+  registerPushServiceWorker,
+  subscribeUserToPush,
+  dispatchPushNotificationToAll,
+  testLocalPushNotification,
+  getPushSubscribersCount,
+  isPushNotificationSupported,
+  getNotificationPermissionStatus
+} from './lib/pushNotifications';
 
 const QRScannerComponent = ({ onScan, onClose }: { onScan: (data: string) => void, onClose: () => void }) => {
   const [error, setError] = useState<string | null>(null);
@@ -1483,6 +1494,64 @@ const MemberArea = ({
   });
   const [isMinistryLoading, setIsMinistryLoading] = useState(false);
   const [isConfirmingAccountDelete, setIsConfirmingAccountDelete] = useState(false);
+  const [notificationStatus, setNotificationStatus] = useState<NotificationPermission>(() => {
+    return getNotificationPermissionStatus();
+  });
+  const [isActivatingPush, setIsActivatingPush] = useState(false);
+  const [notificationTestMessage, setNotificationTestMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkNotificationStatus = () => {
+      setNotificationStatus(getNotificationPermissionStatus());
+    };
+    checkNotificationStatus();
+    window.addEventListener('focus', checkNotificationStatus);
+    document.addEventListener('visibilitychange', checkNotificationStatus);
+    return () => {
+      window.removeEventListener('focus', checkNotificationStatus);
+      document.removeEventListener('visibilitychange', checkNotificationStatus);
+    };
+  }, []);
+
+  const handleActivateNotifications = async () => {
+    setIsActivatingPush(true);
+    setNotificationTestMessage(null);
+    try {
+      const res = await subscribeUserToPush(user?.id);
+      const updatedStatus = getNotificationPermissionStatus();
+      setNotificationStatus(updatedStatus);
+      if (res.success && updatedStatus === 'granted') {
+        setNotificationTestMessage('Notificações autorizadas com sucesso no seu dispositivo!');
+        try {
+          await testLocalPushNotification(
+            'MEVAM Itapema • Notificações Ativas!',
+            'Seu perfil de membro está conectado e este dispositivo receberá avisos em tempo real.'
+          );
+        } catch (e) {}
+      } else if (res.error) {
+        setNotificationTestMessage(res.error);
+      }
+    } catch (err: any) {
+      setNotificationTestMessage(err?.message || 'Falha ao solicitar autorização.');
+    } finally {
+      setIsActivatingPush(false);
+      setTimeout(() => setNotificationTestMessage(null), 5000);
+    }
+  };
+
+  const handleTestNotification = async () => {
+    setNotificationTestMessage('Disparando alerta de teste...');
+    const ok = await testLocalPushNotification(
+      'MEVAM Itapema • Teste de Notificação',
+      'Notificações ativas! Você receberá escalas, comunicados e avisos de culto neste dispositivo.'
+    );
+    if (ok) {
+      setNotificationTestMessage('Alerta de teste enviado com sucesso para o aparelho!');
+    } else {
+      setNotificationTestMessage('Não foi possível exibir a notificação. Verifique se o aparelho não está no modo Não Perturbe.');
+    }
+    setTimeout(() => setNotificationTestMessage(null), 5000);
+  };
 
   const sanitizePII = (data: any): any => {
     if (!data) return data;
@@ -2238,21 +2307,82 @@ const MemberArea = ({
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Sidebar Navigation */}
-          <div className="lg:col-span-1 flex lg:flex-col space-x-2 lg:space-x-0 lg:space-y-2 overflow-x-auto lg:overflow-x-visible pb-4 lg:pb-0 scrollbar-hide">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-shrink-0 lg:w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all ${
-                  activeTab === tab.id 
-                    ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                    : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-100 lg:border-none'
-                }`}
-              >
-                {tab.icon}
-                <span className="whitespace-nowrap">{tab.name}</span>
-              </button>
-            ))}
+          <div className="lg:col-span-1 space-y-4">
+            {/* Member Profile Summary Card with Notification Status */}
+            <div className="bg-white rounded-3xl p-4 border border-stone-100 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-amber-500/15 text-amber-700 font-bold flex items-center justify-center text-base uppercase border border-amber-500/25 flex-shrink-0 shadow-xs">
+                  {(formData.nome || user?.email || 'M').charAt(0)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-bold text-stone-900 truncate">
+                    {formData.nome || 'Membro MEVAM'}
+                  </h3>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider bg-stone-100 px-2 py-0.5 rounded-full">
+                      {userRole || 'Membro'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Visual Indicator of 'Notificações Ativas' in Sidebar */}
+              <div className="mt-3 pt-3 border-t border-stone-100">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Aparelho</span>
+                  <span className="text-[10px] font-medium text-stone-400">Push</span>
+                </div>
+                {notificationStatus === 'granted' ? (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200/90 text-emerald-700 text-xs font-bold w-full justify-center shadow-xs">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                    </span>
+                    <BellRing size={14} className="text-emerald-600 flex-shrink-0" />
+                    <span>Notificações Ativas</span>
+                  </div>
+                ) : notificationStatus === 'default' ? (
+                  <button
+                    type="button"
+                    onClick={handleActivateNotifications}
+                    disabled={isActivatingPush}
+                    className="inline-flex items-center justify-between gap-1.5 px-3 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold w-full transition cursor-pointer"
+                    title="Toque para autorizar notificações neste aparelho"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-amber-400"></span>
+                      <Bell size={13} className="text-amber-600" />
+                      <span>Ativar Notificações</span>
+                    </span>
+                    <span className="text-[10px] font-bold text-amber-700 underline">Ativar</span>
+                  </button>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 border border-stone-200 text-stone-600 text-xs font-medium w-full justify-center" title="Permissão bloqueada no navegador">
+                    <span className="h-2 w-2 rounded-full bg-stone-400"></span>
+                    <Bell size={13} className="text-stone-500" />
+                    <span>Notificações Bloqueadas</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Navigation Tabs */}
+            <div className="flex lg:flex-col space-x-2 lg:space-x-0 lg:space-y-2 overflow-x-auto lg:overflow-x-visible pb-4 lg:pb-0 scrollbar-hide">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex-shrink-0 lg:w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium transition-all ${
+                    activeTab === tab.id 
+                      ? 'bg-primary text-white shadow-lg shadow-primary/20' 
+                      : 'bg-white text-stone-600 hover:bg-stone-100 border border-stone-100 lg:border-none'
+                  }`}
+                >
+                  {tab.icon}
+                  <span className="whitespace-nowrap">{tab.name}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Content Area */}
@@ -2285,7 +2415,128 @@ const MemberArea = ({
               <>
                 {activeTab === 'cadastro' && (
               <div className="space-y-6">
-                <h2 className="text-xl font-bold mb-6">Atualizar Dados Cadastrais</h2>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-stone-100">
+                  <div>
+                    <h2 className="text-xl font-bold text-stone-900">Atualizar Dados Cadastrais</h2>
+                    <p className="text-xs text-stone-500 mt-0.5">Perfil de membro da MEVAM Itapema Sertão</p>
+                  </div>
+
+                  {/* Visual Indicator of 'Notificações Ativas' in the Member Profile Panel Header */}
+                  {notificationStatus === 'granted' ? (
+                    <div 
+                      id="member-profile-notification-indicator"
+                      className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold shadow-xs flex-shrink-0"
+                    >
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                      </span>
+                      <BellRing size={14} className="text-emerald-600" />
+                      <span>Notificações Ativas</span>
+                    </div>
+                  ) : notificationStatus === 'default' ? (
+                    <button
+                      id="member-profile-notification-indicator"
+                      type="button"
+                      onClick={handleActivateNotifications}
+                      disabled={isActivatingPush}
+                      className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold transition cursor-pointer shadow-xs active:scale-95 flex-shrink-0"
+                    >
+                      <Bell size={14} className="text-amber-600" />
+                      <span>{isActivatingPush ? 'Ativando...' : 'Ativar Notificações no Dispositivo'}</span>
+                    </button>
+                  ) : (
+                    <div 
+                      id="member-profile-notification-indicator"
+                      className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-stone-100 border border-stone-200 text-stone-600 text-xs font-semibold flex-shrink-0"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-stone-400"></span>
+                      <Bell size={14} className="text-stone-500" />
+                      <span>Notificações Bloqueadas</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Card de Notificações no Perfil */}
+                <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                  notificationStatus === 'granted'
+                    ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
+                    : notificationStatus === 'default'
+                    ? 'bg-amber-50/60 border-amber-200 text-amber-950'
+                    : 'bg-stone-50 border-stone-200 text-stone-900'
+                }`}>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className={`p-3 rounded-2xl flex-shrink-0 ${
+                        notificationStatus === 'granted'
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : notificationStatus === 'default'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-stone-200 text-stone-600'
+                      }`}>
+                        {notificationStatus === 'granted' ? <BellRing size={22} /> : <Bell size={22} />}
+                      </div>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-bold text-sm text-stone-900">
+                            {notificationStatus === 'granted' 
+                              ? 'Notificações Ativas no Dispositivo' 
+                              : notificationStatus === 'default' 
+                              ? 'Notificações Pendentes de Ativação' 
+                              : 'Notificações Bloqueadas no Navegador'}
+                          </h4>
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                            notificationStatus === 'granted'
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                              : notificationStatus === 'default'
+                              ? 'bg-amber-100 text-amber-800 border-amber-300'
+                              : 'bg-stone-200 text-stone-700 border-stone-300'
+                          }`}>
+                            Status: {notificationStatus}
+                          </span>
+                        </div>
+                        <p className="text-xs text-stone-600 mt-1 leading-relaxed max-w-xl">
+                          {notificationStatus === 'granted'
+                            ? 'Este aparelho está autorizado para receber avisos de cultos ao vivo, novas escalas de ministério e comunicados oficiais da MEVAM.'
+                            : notificationStatus === 'default'
+                            ? 'Autorize o recebimento de notificações no seu aparelho para ser notificado sobre escalas ministeriais e transmissões de cultos.'
+                            : 'As notificações estão desativadas nas configurações do navegador ou sistema operacional deste dispositivo.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
+                      {notificationStatus === 'granted' ? (
+                        <button
+                          type="button"
+                          onClick={handleTestNotification}
+                          className="px-4 py-2.5 rounded-xl bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold transition shadow-xs flex items-center gap-2 cursor-pointer active:scale-95"
+                          title="Enviar uma notificação de teste para verificar no dispositivo"
+                        >
+                          <Smartphone size={14} />
+                          <span>Testar no Aparelho</span>
+                        </button>
+                      ) : notificationStatus === 'default' ? (
+                        <button
+                          type="button"
+                          disabled={isActivatingPush}
+                          onClick={handleActivateNotifications}
+                          className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold transition shadow-md flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
+                        >
+                          <Bell size={14} />
+                          <span>{isActivatingPush ? 'Ativando...' : 'Ativar Notificações'}</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {notificationTestMessage && (
+                    <div className="mt-3.5 p-3 rounded-xl bg-white border border-stone-200 text-xs font-medium text-stone-700 flex items-center gap-2 animate-in fade-in">
+                      <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />
+                      <span>{notificationTestMessage}</span>
+                    </div>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="md:col-span-2">
                     <label className="block text-sm font-semibold text-stone-700 mb-2">E-mail de Login (Base de Dados)</label>
@@ -5661,6 +5912,13 @@ const PastorArea = ({
   const [allMinistryMembers, setAllMinistryMembers] = useState<any[]>([]);
   const [isAddingNoticeForPastors, setIsAddingNoticeForPastors] = useState(false);
   const [showSqlNoticeModal, setShowSqlNoticeModal] = useState(false);
+  const [showPushInfoModal, setShowPushInfoModal] = useState(false);
+  const [showPushHealthSection, setShowPushHealthSection] = useState(true);
+  const [sendPushToMembers, setSendPushToMembers] = useState(true);
+  const [pushSubscribersCount, setPushSubscribersCount] = useState<number>(0);
+  const [pushTestStatus, setPushTestStatus] = useState<string | null>(null);
+  const [isSubscribingDevice, setIsSubscribingDevice] = useState(false);
+  const [subscribeResult, setSubscribeResult] = useState<string | null>(null);
   const [sqlCopied, setSqlCopied] = useState(false);
   const [selectedMinistryForNotice, setSelectedMinistryForNotice] = useState('');
   const [newNoticeForPastors, setNewNoticeForPastors] = useState({ title: '', content: '' });
@@ -6403,6 +6661,7 @@ const PastorArea = ({
 
   useEffect(() => {
     fetchData();
+    getPushSubscribersCount().then(count => setPushSubscribersCount(count)).catch(() => {});
   }, []);
 
   const handleSaveDevotional = async (e: React.FormEvent) => {
@@ -6875,6 +7134,20 @@ const PastorArea = ({
       // 6. Tocar o som oficial de notificação
       playNotificationSound();
 
+      // 6.1 Disparar Web Push API / Google FCM para os celulares dos membros
+      if (sendPushToMembers) {
+        try {
+          await dispatchPushNotificationToAll({
+            title: newNoticeForPastors.title.trim(),
+            body: newNoticeForPastors.content.trim(),
+            url: '/#avisos',
+            category: isGeneral ? 'Geral' : (ministries.find(m => m.id === selectedMinistryForNotice)?.name || 'Ministério')
+          });
+        } catch (pushErr) {
+          console.warn('[Push] Erro não bloqueante no envio push:', pushErr);
+        }
+      }
+
       // 7. Salvar estado de notificação não lida para a home page
       try {
         localStorage.setItem('mevam_has_unread_notice', 'true');
@@ -6884,10 +7157,13 @@ const PastorArea = ({
       // 8. Sincronizar dados
       await Promise.all([fetchData(), fetchHomeContent()]);
 
+      // Atualizar contagem de inscritos de push
+      getPushSubscribersCount().then(count => setPushSubscribersCount(count)).catch(() => {});
+
       setNewNoticeForPastors({ title: '', content: '' });
       setSelectedMinistryForNotice('');
       setIsAddingNoticeForPastors(false);
-      alert('Aviso publicado com sucesso! Ele foi adicionado à sessão Avisos da Página Inicial e Central com notificação sonora, e permanecerá até ser excluído.');
+      alert('Aviso publicado com sucesso! Notificação Push (Web Push API / FCM) enviada aos celulares dos membros e cadastrada na Página Inicial com alerta sonoro.');
     } catch (error: any) {
       console.error('Error adding notice as pastor:', error);
       alert('Erro ao enviar aviso: ' + (error?.message || 'Falha ao salvar.'));
@@ -8089,6 +8365,28 @@ CREATE POLICY "Staff can delete church_services" ON public.church_services FOR D
                           <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
                             <button
                               type="button"
+                              onClick={() => setShowPushHealthSection(prev => !prev)}
+                              className={`px-3.5 py-2.5 rounded-xl text-xs font-bold border shadow-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer ${
+                                showPushHealthSection
+                                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-emerald-600/20'
+                                  : 'bg-emerald-50 text-emerald-900 border-emerald-200 hover:bg-emerald-100'
+                              }`}
+                              title="Visualizar log de expurgo automático de tokens de notificação expirados (410/404)"
+                            >
+                              <ShieldCheck size={15} className={showPushHealthSection ? 'text-white' : 'text-emerald-700'} />
+                              <span>{showPushHealthSection ? 'Saúde da Base (410/404) ✓' : 'Saúde da Base (410/404)'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setShowPushInfoModal(true)}
+                              className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 border border-amber-300/80 shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                              title="Configurações de Web Push API, FCM e Service Worker"
+                            >
+                              <Smartphone size={15} className="text-amber-700" />
+                              <span>Web Push / FCM ({pushSubscribersCount})</span>
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => setShowSqlNoticeModal(true)}
                               className="px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white hover:bg-stone-100 text-stone-700 border border-stone-300 shadow-sm flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
                               title="Visualizar script SQL para liberar exclusão e criação no Supabase"
@@ -8184,7 +8482,26 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
 
 -- Habilitar Realtime para avisos e comunicados
 ALTER PUBLICATION supabase_realtime ADD TABLE public.announcements;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.ministry_notices;`;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.ministry_notices;
+
+-- TABELA DE REGISTRO DE DISPOSITIVOS PARA PUSH NOTIFICATIONS (WEB PUSH / FCM)
+CREATE TABLE IF NOT EXISTS public.push_subscriptions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  endpoint TEXT UNIQUE NOT NULL,
+  p256dh TEXT,
+  auth TEXT,
+  keys JSONB,
+  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  user_agent TEXT,
+  device_name TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public can manage push subscriptions" ON public.push_subscriptions;
+CREATE POLICY "Public can manage push subscriptions" ON public.push_subscriptions FOR ALL USING (true) WITH CHECK (true);
+ALTER PUBLICATION supabase_realtime ADD TABLE public.push_subscriptions;`;
                                     navigator.clipboard.writeText(sql);
                                     setSqlCopied(true);
                                     setTimeout(() => setSqlCopied(false), 2500);
@@ -8245,6 +8562,160 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                                 <button
                                   type="button"
                                   onClick={() => setShowSqlNoticeModal(false)}
+                                  className="px-5 py-2.5 rounded-xl bg-stone-900 text-white font-bold text-xs hover:bg-black transition cursor-pointer"
+                                >
+                                  Fechar
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {showPushInfoModal && (
+                          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                            <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-stone-200 space-y-5 max-h-[90vh] overflow-y-auto flex flex-col">
+                              <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+                                <div className="flex items-center gap-3">
+                                  <span className="p-2.5 rounded-2xl bg-amber-500 text-white shadow-sm">
+                                    <Smartphone size={22} />
+                                  </span>
+                                  <div>
+                                    <h4 className="font-bold text-stone-900 text-lg">Push Notifications & FCM</h4>
+                                    <p className="text-xs text-stone-500">Service Worker (sw.js) • Web Push API • Firebase Cloud Messaging</p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPushInfoModal(false)}
+                                  className="text-stone-400 hover:text-stone-700 p-1.5 rounded-lg hover:bg-stone-100 transition cursor-pointer"
+                                >
+                                  <X size={20} />
+                                </button>
+                              </div>
+
+                              {/* Arquitetura em 3 Camadas */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200/70 space-y-1.5">
+                                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                                    <ShieldCheck size={16} className="text-amber-600" />
+                                    <span>1. Service Worker</span>
+                                  </div>
+                                  <p className="text-[11px] text-amber-950/80 leading-relaxed">
+                                    Arquivo <strong>sw.js</strong> em segundo plano escutando eventos de push e chamando <em>self.registration.showNotification()</em>.
+                                  </p>
+                                </div>
+
+                                <div className="p-3.5 rounded-2xl bg-stone-50 border border-stone-200 space-y-1.5">
+                                  <div className="flex items-center gap-1.5 text-xs font-bold text-stone-900">
+                                    <Radio size={16} className="text-amber-600" />
+                                    <span>2. FCM / Google</span>
+                                  </div>
+                                  <p className="text-[11px] text-stone-600 leading-relaxed">
+                                    Entrega direta via servidores Google FCM no celular mesmo com o aplicativo ou tela do navegador fechados.
+                                  </p>
+                                </div>
+
+                                <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/70 space-y-1.5">
+                                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
+                                    <Database size={16} className="text-emerald-600" />
+                                    <span>3. Backend & Tokens</span>
+                                  </div>
+                                  <p className="text-[11px] text-emerald-950/80 leading-relaxed">
+                                    Tokens salvos em <strong>push_subscriptions</strong> e rota <em>/api/push/send</em> pronta com biblioteca <em>web-push</em>.
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Ações de Teste e Inscrição no Aparelho */}
+                              <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <h5 className="text-xs font-bold text-stone-900">Status do Aparelho Atual</h5>
+                                    <p className="text-[11px] text-stone-500">
+                                      Permissão no Navegador: <span className="font-bold text-stone-800 uppercase">{getNotificationPermissionStatus()}</span>
+                                    </p>
+                                  </div>
+                                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                    {pushSubscribersCount} Aparelho(s) Registrados
+                                  </span>
+                                </div>
+
+                                {subscribeResult && (
+                                  <div className="p-2.5 rounded-xl bg-emerald-100 text-emerald-900 text-xs font-medium border border-emerald-300">
+                                    {subscribeResult}
+                                  </div>
+                                )}
+
+                                <div className="flex flex-wrap gap-2.5 pt-1">
+                                  <button
+                                    type="button"
+                                    disabled={isSubscribingDevice}
+                                    onClick={async () => {
+                                      setIsSubscribingDevice(true);
+                                      setSubscribeResult(null);
+                                      const res = await subscribeUserToPush(currentUser?.id);
+                                      setIsSubscribingDevice(false);
+                                      if (res.success) {
+                                        setSubscribeResult('Aparelho inscrito com sucesso no FCM/Web Push!');
+                                        getPushSubscribersCount().then(c => setPushSubscribersCount(c));
+                                      } else {
+                                        setSubscribeResult(res.error || 'Não foi possível cadastrar permissão.');
+                                      }
+                                      setTimeout(() => setSubscribeResult(null), 5000);
+                                    }}
+                                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold flex items-center gap-2 shadow-sm transition active:scale-95 cursor-pointer disabled:opacity-50"
+                                  >
+                                    <Smartphone size={15} />
+                                    <span>{isSubscribingDevice ? 'Registrando Aparelho...' : 'Cadastrar Meu Aparelho para Receber Pushes'}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      setPushTestStatus('Enviando...');
+                                      const ok = await testLocalPushNotification(
+                                        'MEVAM Itapema • Teste de Push',
+                                        'Parabéns! O Service Worker e o canal de notificações estão 100% operacionais no seu dispositivo.'
+                                      );
+                                      setPushTestStatus(ok ? 'Enviado!' : 'Falha');
+                                      setTimeout(() => setPushTestStatus(null), 3000);
+                                    }}
+                                    className="px-4 py-2 rounded-xl bg-white hover:bg-stone-100 text-stone-800 border border-stone-300 text-xs font-bold flex items-center gap-2 shadow-xs transition active:scale-95 cursor-pointer"
+                                  >
+                                    <Bell size={15} className="text-amber-600" />
+                                    <span>{pushTestStatus || 'Disparar Notificação de Teste'}</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      getPushSubscribersCount().then(c => {
+                                        setPushSubscribersCount(c);
+                                        setSubscribeResult(`Contagem atualizada: ${c} dispositivos.`);
+                                        setTimeout(() => setSubscribeResult(null), 3000);
+                                      });
+                                    }}
+                                    className="px-3.5 py-2 rounded-xl bg-white hover:bg-stone-100 text-stone-600 border border-stone-200 text-xs font-medium flex items-center gap-1.5 transition active:scale-95 cursor-pointer"
+                                  >
+                                    <RefreshCw size={13} />
+                                    <span>Atualizar</span>
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Log de Expurgos Automáticos de Tokens (410/404) */}
+                              <div className="pt-2 border-t border-stone-100">
+                                <PushTokensLog
+                                  currentSubscribersCount={pushSubscribersCount}
+                                  onRefreshParentCount={() => getPushSubscribersCount().then(c => setPushSubscribersCount(c))}
+                                  isCompact={true}
+                                />
+                              </div>
+
+                              <div className="flex justify-end pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setShowPushInfoModal(false)}
                                   className="px-5 py-2.5 rounded-xl bg-stone-900 text-white font-bold text-xs hover:bg-black transition cursor-pointer"
                                 >
                                   Fechar
@@ -8320,6 +8791,7 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                                 />
                               </div>
 
+                              {/* Som de Notificação */}
                               <div className="flex items-center justify-between p-3.5 rounded-xl bg-amber-50 border border-amber-200/80">
                                 <div className="flex items-center gap-2.5">
                                   <span className="p-1.5 rounded-lg bg-amber-500 text-white">
@@ -8339,6 +8811,62 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                                 </button>
                               </div>
 
+                              {/* Notificação Push no Celular dos Membros (FCM / Web Push API) */}
+                              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 via-amber-500/5 to-transparent border border-amber-300 shadow-sm space-y-3">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-center gap-3">
+                                    <div className="p-2 rounded-xl bg-amber-500 text-white shadow-sm">
+                                      <Smartphone size={18} />
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <h5 className="text-xs font-bold text-stone-900">
+                                          Disparar Notificação Push no Celular dos Membros
+                                        </h5>
+                                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                          Service Worker + FCM
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-stone-600 mt-0.5">
+                                        Executa o arquivo <strong>sw.js</strong> em segundo plano, enviando alerta nativo mesmo com o celular bloqueado ou o navegador fechado.
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-1">
+                                    <input 
+                                      type="checkbox" 
+                                      checked={sendPushToMembers}
+                                      onChange={(e) => setSendPushToMembers(e.target.checked)}
+                                      className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                                  </label>
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-between pt-2 border-t border-amber-200/60 text-[11px] text-stone-500 gap-2">
+                                  <span className="flex items-center gap-1.5 text-stone-600 font-medium">
+                                    <Radio size={13} className="text-amber-600 animate-pulse" />
+                                    <span>Entrega nativa via Web Push API + Google FCM ({pushSubscribersCount} aparelho(s) cadastrados)</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      setPushTestStatus('Disparando...');
+                                      const ok = await testLocalPushNotification(
+                                        newNoticeForPastors.title || 'MEVAM Itapema • Notificação de Teste',
+                                        newNoticeForPastors.content || 'Este é um teste da notificação que chegará nos celulares dos membros.'
+                                      );
+                                      setPushTestStatus(ok ? 'Notificação enviada!' : 'Verifique permissão');
+                                      setTimeout(() => setPushTestStatus(null), 3000);
+                                    }}
+                                    className="px-3 py-1 rounded-lg bg-white hover:bg-amber-50 text-amber-900 border border-amber-300 text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
+                                  >
+                                    <Bell size={12} className="text-amber-600" />
+                                    <span>{pushTestStatus || 'Testar Push no Meu Aparelho'}</span>
+                                  </button>
+                                </div>
+                              </div>
+
                               <div className="flex gap-3 justify-end pt-2">
                                 <button 
                                   type="button"
@@ -8353,10 +8881,25 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                                   className="bg-stone-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm hover:bg-black transition-all disabled:opacity-50 flex items-center shadow-md cursor-pointer"
                                 >
                                   {isMinistryLoading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" /> : <BellRing size={16} className="mr-2 text-amber-400" />}
-                                  Publicar e Notificar Home
+                                  Publicar e Enviar Notificação Push aos Celulares
                                 </button>
                               </div>
                             </form>
+                          </motion.div>
+                        )}
+
+                        {/* Componente de Log da Saúde da Base de Assinaturas (Expurgo de Tokens 410/404) */}
+                        {showPushHealthSection && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.2 }}
+                          >
+                            <PushTokensLog
+                              currentSubscribersCount={pushSubscribersCount}
+                              onRefreshParentCount={() => getPushSubscribersCount().then(c => setPushSubscribersCount(c))}
+                            />
                           </motion.div>
                         )}
 
@@ -10849,15 +11392,40 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
           maxWidth="max-w-2xl"
         >
           <div className="space-y-6">
-            <div className="flex items-center space-x-4 border-b border-stone-100 pb-6">
-              <div className="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center text-xl font-bold text-stone-500">
-                {selectedProfile.full_name.charAt(0)}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-stone-100 pb-6">
+              <div className="flex items-center space-x-4">
+                <div className="w-16 h-16 bg-stone-100 rounded-full flex items-center justify-center text-xl font-bold text-stone-500">
+                  {selectedProfile.full_name.charAt(0)}
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-stone-900">{selectedProfile.full_name}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded-full uppercase tracking-widest">
+                      {selectedProfile.role || 'member'}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xl font-bold text-stone-900">{selectedProfile.full_name}</h3>
-                <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded-full uppercase tracking-widest">
-                  {selectedProfile.role || 'member'}
-                </span>
+
+              {/* Indicador visual de Notificações Ativas */}
+              <div className="flex flex-col sm:items-end gap-1">
+                {getNotificationPermissionStatus() === 'granted' ? (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold shadow-xs">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <BellRing size={13} className="text-emerald-600" />
+                    <span>Notificações Ativas</span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-stone-100 border border-stone-200 text-stone-600 text-xs font-medium">
+                    <span className="h-2 w-2 rounded-full bg-stone-400"></span>
+                    <Bell size={13} className="text-stone-500" />
+                    <span>{getNotificationPermissionStatus() === 'denied' ? 'Notificações Bloqueadas' : 'Notificações Pendentes'}</span>
+                  </div>
+                )}
+                <span className="text-[10px] text-stone-400">Canal Push Web</span>
               </div>
             </div>
 
@@ -10879,6 +11447,20 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                 <p className="text-sm font-medium text-stone-700">
                   {selectedProfile.birth_date ? new Date(selectedProfile.birth_date).toLocaleDateString('pt-BR') : 'Não informado'}
                 </p>
+              </div>
+              <div className="space-y-1 md:col-span-2">
+                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Status de Notificações no Aparelho</p>
+                <div className="text-sm font-medium text-stone-700 flex items-center gap-1.5 mt-0.5">
+                  {getNotificationPermissionStatus() === 'granted' ? (
+                    <span className="text-emerald-700 font-semibold flex items-center gap-1.5 text-xs">
+                      <CheckCircle2 size={15} className="text-emerald-600" /> Autorizadas e ativas no dispositivo (Permissão: granted)
+                    </span>
+                  ) : getNotificationPermissionStatus() === 'denied' ? (
+                    <span className="text-stone-500 text-xs">Bloqueadas no navegador (Permissão: denied)</span>
+                  ) : (
+                    <span className="text-amber-700 text-xs">Pendente de autorização (Permissão: default)</span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -15923,8 +16505,25 @@ export default function App() {
           .on(
             'postgres_changes',
             { event: '*', schema: 'public', table: 'announcements' },
-            () => {
+            (payload: any) => {
               debouncedFetchHomeContent();
+              if (payload?.eventType === 'INSERT' && payload?.new) {
+                playNotificationSound();
+                testLocalPushNotification(
+                  payload.new.title || 'MEVAM Itapema • Novo Aviso',
+                  payload.new.description || 'Novo comunicado pastoral disponível.'
+                ).catch(() => {});
+              }
+            }
+          )
+          .on(
+            'broadcast',
+            { event: 'push_notice' },
+            (msg: any) => {
+              playNotificationSound();
+              if (msg?.payload) {
+                testLocalPushNotification(msg.payload.title, msg.payload.body).catch(() => {});
+              }
             }
           )
           .on(
