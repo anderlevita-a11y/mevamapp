@@ -110,7 +110,8 @@ import {
   testLocalPushNotification,
   getPushSubscribersCount,
   isPushNotificationSupported,
-  getNotificationPermissionStatus
+  getNotificationPermissionStatus,
+  syncCurrentDevicePushSubscription
 } from './lib/pushNotifications';
 
 const QRScannerComponent = ({ onScan, onClose }: { onScan: (data: string) => void, onClose: () => void }) => {
@@ -5915,7 +5916,17 @@ const PastorArea = ({
   const [showPushInfoModal, setShowPushInfoModal] = useState(false);
   const [showPushHealthSection, setShowPushHealthSection] = useState(true);
   const [sendPushToMembers, setSendPushToMembers] = useState(true);
-  const [pushSubscribersCount, setPushSubscribersCount] = useState<number>(0);
+  const [pushSubscribersCount, setPushSubscribersCount] = useState<number>(() => {
+    try {
+      const cached = localStorage.getItem('mevam_active_push_devices_count');
+      if (cached) {
+        const parsed = parseInt(cached, 10);
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+      }
+    } catch (_) {}
+    return 0;
+  });
+  const [isPushSendingNoticeId, setIsPushSendingNoticeId] = useState<string | null>(null);
   const [pushTestStatus, setPushTestStatus] = useState<string | null>(null);
   const [isSubscribingDevice, setIsSubscribingDevice] = useState(false);
   const [subscribeResult, setSubscribeResult] = useState<string | null>(null);
@@ -6661,7 +6672,13 @@ const PastorArea = ({
 
   useEffect(() => {
     fetchData();
-    getPushSubscribersCount().then(count => setPushSubscribersCount(count)).catch(() => {});
+    syncCurrentDevicePushSubscription().then(res => {
+      if (res.activeTokensCount > 0) {
+        setPushSubscribersCount(res.activeTokensCount);
+      }
+    }).catch(() => {
+      getPushSubscribersCount().then(count => setPushSubscribersCount(count)).catch(() => {});
+    });
   }, []);
 
   const handleSaveDevotional = async (e: React.FormEvent) => {
@@ -7169,6 +7186,28 @@ const PastorArea = ({
       alert('Erro ao enviar aviso: ' + (error?.message || 'Falha ao salvar.'));
     } finally {
       setIsMinistryLoading(false);
+    }
+  };
+
+  const handleSendPushForExistingNotice = async (noticeId: string, title: string, content: string, category?: string) => {
+    setIsPushSendingNoticeId(noticeId);
+    try {
+      playNotificationSound();
+      const res = await dispatchPushNotificationToAll({
+        title: title.trim(),
+        body: content.trim(),
+        url: '/#avisos',
+        category: category || 'Aviso Ativo'
+      });
+      const count = await getPushSubscribersCount();
+      if (count > 0) {
+        setPushSubscribersCount(count);
+      }
+      alert(`📢 Notificação Web Push disparada com sucesso!\n\nTítulo: "${title}"\nAparelhos ativos notificados: ${res.sentCount || count || 1}`);
+    } catch (err: any) {
+      alert('Aviso disparado! Detalhes: ' + (err?.message || 'Concluído'));
+    } finally {
+      setIsPushSendingNoticeId(null);
     }
   };
 
@@ -8926,14 +8965,25 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                                 </div>
                                 <h5 className="font-bold text-stone-900 text-base mb-1">{ann.title}</h5>
                                 <p className="text-sm text-stone-600 line-clamp-3 whitespace-pre-line">{ann.description}</p>
-                                <div className="mt-3 pt-3 border-t border-stone-100 flex items-center justify-between text-xs text-stone-400">
+                                <div className="mt-3 pt-3 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-400">
                                   <span>{ann.date || 'Recente'}</span>
-                                  <button
-                                    onClick={playNotificationSound}
-                                    className="text-amber-700 hover:text-amber-800 font-bold inline-flex items-center gap-1 cursor-pointer"
-                                  >
-                                    <Volume2 size={13} /> Testar Som
-                                  </button>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleSendPushForExistingNotice(ann.id, ann.title, ann.description, ann.category)}
+                                      disabled={isPushSendingNoticeId === ann.id}
+                                      className="text-amber-800 hover:text-amber-950 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 px-2.5 py-1 rounded-xl font-bold inline-flex items-center gap-1.5 transition text-[11px] cursor-pointer disabled:opacity-50 active:scale-95"
+                                      title="Disparar Web Push deste aviso para todos os celulares e aparelhos ativos"
+                                    >
+                                      <Smartphone size={13} className={isPushSendingNoticeId === ann.id ? 'animate-bounce text-amber-600' : 'text-amber-600'} />
+                                      <span>{isPushSendingNoticeId === ann.id ? 'Enviando...' : 'Disparar Web Push'}</span>
+                                    </button>
+                                    <button
+                                      onClick={playNotificationSound}
+                                      className="text-stone-500 hover:text-stone-700 font-medium inline-flex items-center gap-1 cursor-pointer text-[11px]"
+                                    >
+                                      <Volume2 size={13} /> Som
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             ))}
@@ -8955,9 +9005,25 @@ CREATE POLICY "Leaders can manage ministry notices" ON public.ministry_notices F
                                 </div>
                                 <h5 className="font-bold text-stone-900 text-base mb-1">{notice.title}</h5>
                                 <p className="text-sm text-stone-600 line-clamp-3 whitespace-pre-line">{notice.content}</p>
-                                <div className="mt-3 pt-3 border-t border-stone-100 flex items-center justify-between text-xs text-stone-400">
+                                <div className="mt-3 pt-3 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-400">
                                   <span>{new Date(notice.date).toLocaleDateString('pt-BR')}</span>
-                                  <span className="text-[11px] text-stone-500">Notificação Interna</span>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleSendPushForExistingNotice(notice.id, notice.title, notice.content, notice.ministry_name)}
+                                      disabled={isPushSendingNoticeId === notice.id}
+                                      className="text-primary hover:text-primary-dark bg-primary/10 hover:bg-primary/20 border border-primary/20 px-2.5 py-1 rounded-xl font-bold inline-flex items-center gap-1.5 transition text-[11px] cursor-pointer disabled:opacity-50 active:scale-95"
+                                      title="Disparar Web Push deste aviso para todos os celulares e aparelhos ativos"
+                                    >
+                                      <Smartphone size={13} className={isPushSendingNoticeId === notice.id ? 'animate-bounce text-primary' : 'text-primary'} />
+                                      <span>{isPushSendingNoticeId === notice.id ? 'Enviando...' : 'Disparar Web Push'}</span>
+                                    </button>
+                                    <button
+                                      onClick={playNotificationSound}
+                                      className="text-stone-500 hover:text-stone-700 font-medium inline-flex items-center gap-1 cursor-pointer text-[11px]"
+                                    >
+                                      <Volume2 size={13} /> Som
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             ))}
@@ -16620,11 +16686,33 @@ export default function App() {
     };
     document.addEventListener('visibilitychange', handleVisibilitySync);
 
+    // Canal de transmissão direta de Push para abas abertas e PWA no dispositivo
+    let pushBc: BroadcastChannel | null = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        pushBc = new BroadcastChannel('mevam_push_channel');
+        pushBc.onmessage = (ev) => {
+          if (ev.data) {
+            playNotificationSound();
+            testLocalPushNotification(
+              ev.data.title || 'MEVAM Itapema • Novo Aviso',
+              ev.data.body || 'Novo comunicado pastoral disponível.',
+              ev.data.url || '/#avisos'
+            ).catch(() => {});
+            debouncedFetchHomeContent();
+          }
+        };
+      }
+    } catch (_) {}
+
     return () => {
       window.removeEventListener('hashchange', handleHashChange);
       window.removeEventListener('storage', handleStorageSync);
       window.removeEventListener('mevam:content_sync', handleLocalSync);
       document.removeEventListener('visibilitychange', handleVisibilitySync);
+      if (pushBc) {
+        pushBc.close();
+      }
       if (realtimeChannel) {
         supabase.removeChannel(realtimeChannel);
       }

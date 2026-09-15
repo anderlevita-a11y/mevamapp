@@ -14,7 +14,8 @@ import {
   getPushCleanupLogs, 
   runPushTokenCleanup, 
   TokenCleanupLog, 
-  TokenCleanupSummary 
+  TokenCleanupSummary,
+  syncCurrentDevicePushSubscription
 } from '../lib/pushNotifications';
 
 interface PushTokensLogProps {
@@ -44,11 +45,20 @@ export const PushTokensLog: React.FC<PushTokensLogProps> = ({
   const loadLogs = async () => {
     setIsLoading(true);
     try {
+      const syncRes = await syncCurrentDevicePushSubscription();
       const summary = await getPushCleanupLogs();
+      const effectiveCount = Math.max(
+        currentSubscribersCount,
+        syncRes.activeTokensCount,
+        summary.activeTokensCount
+      );
       setData({
         ...summary,
-        activeTokensCount: currentSubscribersCount > 0 ? currentSubscribersCount : summary.activeTokensCount
+        activeTokensCount: effectiveCount
       });
+      if (onRefreshParentCount && effectiveCount > currentSubscribersCount) {
+        onRefreshParentCount();
+      }
     } catch (err) {
       console.warn('[PushTokensLog] Falha ao carregar logs:', err);
     } finally {
@@ -64,10 +74,16 @@ export const PushTokensLog: React.FC<PushTokensLogProps> = ({
     setIsRunningSweep(true);
     setFeedbackMessage(null);
     try {
+      const syncRes = await syncCurrentDevicePushSubscription();
       const res = await runPushTokenCleanup();
+      const effectiveCount = Math.max(
+        currentSubscribersCount,
+        syncRes.activeTokensCount,
+        res.activeTokensCount || 0
+      );
       setData(prev => ({
         totalRemoved: res.totalRemoved,
-        activeTokensCount: currentSubscribersCount || prev.activeTokensCount,
+        activeTokensCount: effectiveCount || prev.activeTokensCount,
         lastCleanedAt: new Date().toISOString(),
         logs: res.logs
       }));
@@ -204,7 +220,7 @@ export const PushTokensLog: React.FC<PushTokensLogProps> = ({
           </div>
           <div className="flex items-baseline gap-1.5">
             <span className="text-2xl sm:text-3xl font-black text-stone-900">
-              {currentSubscribersCount > 0 ? currentSubscribersCount : data.activeTokensCount}
+              {Math.max(currentSubscribersCount, data.activeTokensCount)}
             </span>
             <span className="text-[11px] font-bold text-stone-500">válidos</span>
           </div>

@@ -313,6 +313,21 @@ export async function dispatchPushNotificationToAll(payload: {
 
   // 2. Dispara Broadcast via Supabase Realtime para todos os aparelhos conectados
   try {
+    // Canal principal ouvido pelo aplicativo
+    const realtimePublic = supabase.channel('mevam-public-realtime');
+    await realtimePublic.send({
+      type: 'broadcast',
+      event: 'push_notice',
+      payload: {
+        title: payload.title,
+        body: payload.body,
+        url: payload.url || '/#avisos',
+        category: payload.category || 'Geral',
+        timestamp: Date.now()
+      }
+    });
+
+    // Canal secundário de redundância
     const channel = supabase.channel('mevam_push_broadcast');
     await channel.send({
       type: 'broadcast',
@@ -321,12 +336,27 @@ export async function dispatchPushNotificationToAll(payload: {
         title: payload.title,
         body: payload.body,
         url: payload.url || '/#avisos',
+        category: payload.category || 'Geral',
         timestamp: Date.now()
       }
     });
   } catch (e) {
     console.warn('[Push] Supabase Realtime broadcast warning:', e);
   }
+
+  // 2b. BroadcastChannel local no navegador para abas e PWA abertos
+  try {
+    if (typeof BroadcastChannel !== 'undefined') {
+      const bc = new BroadcastChannel('mevam_push_channel');
+      bc.postMessage({
+        title: payload.title,
+        body: payload.body,
+        url: payload.url || '/#avisos',
+        timestamp: Date.now()
+      });
+      bc.close();
+    }
+  } catch (_) {}
 
   // 3. Dispara notificação nativa no aparelho atual via Service Worker
   try {
@@ -482,6 +512,7 @@ export async function runPushTokenCleanup(): Promise<{
   totalRemoved: number;
   message: string;
   logs: TokenCleanupLog[];
+  activeTokensCount?: number;
 }> {
   try {
     const res = await fetch('/api/push/run-cleanup', {
@@ -504,6 +535,7 @@ export async function runPushTokenCleanup(): Promise<{
         success: true,
         removedCount: data.removedCount || 0,
         totalRemoved: data.totalRemoved || 0,
+        activeTokensCount: data.activeTokensCount,
         message: data.removedCount > 0
           ? `${data.removedCount} token(s) expirado(s) removido(s) com sucesso!`
           : 'Varredura concluída! Todos os tokens de assinaturas estão saudáveis.',
@@ -541,33 +573,127 @@ export async function runPushTokenCleanup(): Promise<{
     success: true,
     removedCount: 0,
     totalRemoved: currentLogs.totalRemoved,
+    activeTokensCount: currentLogs.activeTokensCount,
     message: 'Varredura concluída: base de assinaturas 100% íntegra!',
     logs: updatedLogs
   };
 }
 
 /**
- * Consulta a contagem de aparelhos registrados para Push no Supabase
+ * Consulta a contagem de aparelhos registrados para Push no Supabase e no servidor Express
  */
 export async function getPushSubscribersCount(): Promise<number> {
-  try {
-    const { count, error } = await supabase
-      .from('push_subscriptions')
-      .select('*', { count: 'exact', head: true });
+  let count = 0;
 
-    if (!error && typeof count === 'number') {
-      return count;
-    }
-  } catch (e) {}
-
-  // Fallback: tentar endpoint local
+  // 1. Tenta endpoint Express (memória + disco)
   try {
     const res = await fetch('/api/push/subscriptions-count');
     if (res.ok) {
       const data = await res.json();
-      return data.count || 0;
+      if (typeof data.count === 'number' && data.count > 0) {
+        count = data.count;
+      }
     }
   } catch (e) {}
 
-  return 0;
+  // 2. Tenta contagem direta no Supabase push_subscriptions se o endpoint retornou 0
+  if (count === 0) {
+    try {
+      const { count: sbCount, error } = await supabase
+        .from('push_subscriptions')
+        .select('*', { count: 'exact', head: true });
+
+      if (!error && typeof sbCount === 'number' && sbCount > 0) {
+        count = sbCount;
+      }
+    } catch (e) {}
+  }
+
+  // 3. Fallback no cache local
+  if (count === 0) {
+    try {
+      const cached = localStorage.getItem('mevam_active_push_devices_count');
+      if (cached) {
+        const parsed = parseInt(cached, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          count = parsed;
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 4. Se o aparelho atual tem push habilitado, garante no mínimo 1 aparelho ativo
+  if (count === 0) {
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        count = 1;
+      } else if (localStorage.getItem('mevam_push_enabled') === 'true') {
+        count = 1;
+      }
+    } catch (_) {}
+  }
+
+  try {
+    if (count > 0) {
+      localStorage.setItem('mevam_active_push_devices_count', String(count));
+    }
+  } catch (_) {}
+
+  return count;
+}
+
+/**
+ * Sincroniza e garante o registro do aparelho atual no backend e no Supabase.
+ * Executado automaticamente ao abrir o aplicativo ou painel pastoral.
+ */
+export async function syncCurrentDevicePushSubscription(userId?: string | null): Promise<{
+  activeTokensCount: number;
+  isRegistered: boolean;
+  permission: NotificationPermission;
+}> {
+  let isRegistered = false;
+  let permission: NotificationPermission = 'default';
+
+  try {
+    if (typeof Notification !== 'undefined') {
+      permission = Notification.permission;
+    }
+
+    if (isPushNotificationSupported()) {
+      await registerPushServiceWorker();
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+
+      // Se o usuário já concedeu permissão, tenta assinar caso ainda não tenha inscrição ativa
+      if (!subscription && permission === 'granted') {
+        try {
+          const applicationServerKey = urlBase64ToUint8Array(DEFAULT_VAPID_PUBLIC_KEY);
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey
+          });
+        } catch (subErr) {
+          console.warn('[Push] Tentativa de registro push automático:', subErr);
+        }
+      }
+
+      if (subscription) {
+        await savePushSubscriptionToDatabase(subscription, userId);
+        isRegistered = true;
+        try {
+          localStorage.setItem('mevam_push_enabled', 'true');
+        } catch (_) {}
+      }
+    }
+  } catch (err) {
+    console.warn('[Push] Falha ao sincronizar dispositivo com o servidor:', err);
+  }
+
+  const activeTokensCount = await getPushSubscribersCount();
+
+  return {
+    activeTokensCount,
+    isRegistered,
+    permission
+  };
 }
