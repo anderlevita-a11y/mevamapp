@@ -16575,10 +16575,9 @@ export default function App() {
               debouncedFetchHomeContent();
               if (payload?.eventType === 'INSERT' && payload?.new) {
                 playNotificationSound();
-                testLocalPushNotification(
-                  payload.new.title || 'MEVAM Itapema • Novo Aviso',
-                  payload.new.description || 'Novo comunicado pastoral disponível.'
-                ).catch(() => {});
+                // Notificação visual agora chega via Web Push nativo (Service Worker),
+                // inclusive para quem está com o app aberto — chamar
+                // testLocalPushNotification aqui duplicava o aviso na tela.
               }
             }
           )
@@ -16587,9 +16586,9 @@ export default function App() {
             { event: 'push_notice' },
             (msg: any) => {
               playNotificationSound();
-              if (msg?.payload) {
-                testLocalPushNotification(msg.payload.title, msg.payload.body).catch(() => {});
-              }
+              // Notificação visual agora chega via Web Push nativo (Service Worker),
+              // inclusive para quem está com o app aberto — chamar
+              // testLocalPushNotification aqui duplicava o aviso na tela.
             }
           )
           .on(
