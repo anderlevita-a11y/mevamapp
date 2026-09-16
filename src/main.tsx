@@ -34,12 +34,20 @@ window.addEventListener('error', (event) => {
   }
 });
 
-// Auto-register service worker for PWA installation and Web Push notifications
+// Auto-registra o Service Worker do PWA e aplica atualizações automaticamente.
+// Antes, onNeedRefresh só logava no console e nunca recarregava a página — o
+// novo Service Worker ficava esperando em segundo plano (skipWaiting) mas o
+// bundle JS já carregado na aba continuava sendo o antigo até o usuário fechar
+// TUDO manualmente. Isso fazia qualquer correção (push, VAPID, etc.) parecer
+// "não funcionar" em aparelhos que não fossem completamente fechados e reabertos.
+// Chamando updateSW(true) aqui, a atualização é aplicada e a página recarrega
+// sozinha assim que uma nova versão é detectada.
 try {
-  registerSW({
+  const updateSW = registerSW({
     immediate: true,
     onNeedRefresh() {
-      console.info('[MEVAM PWA] Nova versão do aplicativo disponível.');
+      console.info('[MEVAM PWA] Nova versão do aplicativo detectada — atualizando automaticamente.');
+      updateSW(true);
     },
     onOfflineReady() {
       console.info('[MEVAM PWA] Aplicativo pronto para uso offline.');
@@ -63,4 +71,3 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
-
