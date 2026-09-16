@@ -358,10 +358,9 @@ export async function dispatchPushNotificationToAll(payload: {
     }
   } catch (_) {}
 
-  // 3. Dispara notificação nativa no aparelho atual via Service Worker
-  try {
-    await testLocalPushNotification(payload.title, payload.body, payload.url);
-  } catch (e) {}
+  // 3. (Removido) A notificação visual agora chega via Web Push nativo
+  // (Service Worker) em todos os aparelhos, inclusive o de quem disparou —
+  // chamar testLocalPushNotification aqui duplicava o aviso na tela do remetente.
 
   return {
     success: true,
