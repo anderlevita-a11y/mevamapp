@@ -54,6 +54,11 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,jpg}'],
+          // Injeta o listener de "push"/"notificationclick" (public/push-sw.js) no
+          // topo do service worker gerado pelo Workbox. Sem isso, o sw.js gerado só
+          // cuida de cache de assets e nunca mostra a notificação quando um Web
+          // Push chega com o app fechado ou em segundo plano.
+          importScripts: ['push-sw.js'],
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -127,7 +132,7 @@ export default defineConfig(() => {
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
+      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
     },
   };
