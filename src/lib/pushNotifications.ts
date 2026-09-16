@@ -27,6 +27,54 @@ export function urlBase64ToUint8Array(base64String: string): Uint8Array {
   }
   return outputArray;
 }
+/**
+ * Garante que a subscrição do Service Worker corresponde à VAPID_PUBLIC_KEY atual.
+ * Se já existir uma subscrição criada com uma chave VAPID antiga/diferente (por exemplo,
+ * após uma troca das chaves no servidor), o navegador NUNCA troca a chave sozinho — ele
+ * mantém a subscrição antiga para sempre, e todo envio real via FCM falha com
+ * "VAPID credentials ... do not correspond" (403), mesmo com o app parecendo funcionar.
+ * Aqui detectamos esse descompasso, cancelamos a subscrição antiga, removemos o registro
+ * antigo do Supabase e criamos uma nova subscrição já com a chave correta.
+ */
+async function getOrRefreshPushSubscription(
+  registration: ServiceWorkerRegistration
+): Promise<PushSubscription | null> {
+  const desiredKey = urlBase64ToUint8Array(DEFAULT_VAPID_PUBLIC_KEY);
+  let subscription = await registration.pushManager.getSubscription();
+
+  if (subscription) {
+    const rawKey = subscription.options?.applicationServerKey
+      ? new Uint8Array(subscription.options.applicationServerKey as ArrayBuffer)
+      : null;
+    const matches = !!rawKey && rawKey.length === desiredKey.length &&
+      rawKey.every((byte, i) => byte === desiredKey[i]);
+
+    if (!matches) {
+      const staleEndpoint = subscription.endpoint;
+      console.warn('[Push] Subscrição existente usa uma chave VAPID diferente da atual — renovando.');
+      try {
+        await subscription.unsubscribe();
+      } catch (e) {
+        console.warn('[Push] Falha ao cancelar subscrição antiga:', e);
+      }
+      try {
+        await supabase.from('push_subscriptions').delete().eq('endpoint', staleEndpoint);
+      } catch (e) {
+        console.warn('[Push] Falha ao remover subscrição antiga do banco:', e);
+      }
+      subscription = null;
+    }
+  }
+
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: desiredKey
+    });
+  }
+
+  return subscription;
+}
 
 /**
  * Verifica se o navegador atual suporta Service Worker, Push API e Notificações
@@ -120,14 +168,7 @@ export async function subscribeUserToPush(userId?: string | null): Promise<{
     const registration = await navigator.serviceWorker.ready;
 
     // 3. Verifica se já existe subscrição ou cria nova
-    let subscription = await registration.pushManager.getSubscription();
-    if (!subscription) {
-      const applicationServerKey = urlBase64ToUint8Array(DEFAULT_VAPID_PUBLIC_KEY);
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey
-      });
-    }
+    const subscription = await getOrRefreshPushSubscription(registration);
 
     // 4. Salva a subscrição no banco de dados (Supabase / Backend)
     if (subscription) {
@@ -661,19 +702,16 @@ export async function syncCurrentDevicePushSubscription(userId?: string | null):
     if (isPushNotificationSupported()) {
       await registerPushServiceWorker();
       const registration = await navigator.serviceWorker.ready;
-      let subscription = await registration.pushManager.getSubscription();
+      let subscription: PushSubscription | null = null;
 
-      // Se o usuário já concedeu permissão, tenta assinar caso ainda não tenha inscrição ativa
-      if (!subscription && permission === 'granted') {
+      if (permission === 'granted') {
         try {
-          const applicationServerKey = urlBase64ToUint8Array(DEFAULT_VAPID_PUBLIC_KEY);
-          subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey
-          });
+          subscription = await getOrRefreshPushSubscription(registration);
         } catch (subErr) {
           console.warn('[Push] Tentativa de registro push automático:', subErr);
         }
+      } else {
+        subscription = await registration.pushManager.getSubscription();
       }
 
       if (subscription) {
