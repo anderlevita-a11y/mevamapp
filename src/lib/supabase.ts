@@ -67,7 +67,7 @@ if (typeof window !== 'undefined') {
 }
 
 if (!isSupabaseConfigured) {
-  console.error('ERRO: Credenciais do Supabase não encontradas ou inválidas!');
+  console.warn('AVISO: Credenciais do Supabase não encontradas ou inválidas!');
   console.info('Certifique-se de configurar VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nas configurações do ambiente.');
 } else {
   console.info('Supabase regulado e configurado com a URL:', supabaseUrl);
